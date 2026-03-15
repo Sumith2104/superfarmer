@@ -215,8 +215,12 @@ def disease():
             'leaf_text': request.form.get('leaf_text', ''),
             'leaf_image': request.files.get('leaf_image')
         }
-        diagnosis = orchestrator.route_request('diagnose', data)
-        return render_template('disease.html', diagnosis=diagnosis)
+        result = orchestrator.route_request('diagnose', data)
+        if isinstance(result, dict):
+            return render_template('disease.html',
+                                   diagnosis=result.get('diagnosis_text'),
+                                   products=result.get('products', []))
+        return render_template('disease.html', diagnosis=result, products=[])
         
     return render_template('disease.html')
 

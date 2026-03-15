@@ -254,26 +254,36 @@ class CropPlannerAgent:
 
 import google.generativeai as genai
 import PIL.Image
+import json
+import re
 
 class DiseaseDiagnosisAgent:
     @staticmethod
     def diagnose(leaf_text, leaf_image=None):
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            return "Error: GEMINI_API_KEY is missing from .env file. Please add it to enable AI Disease Diagnosis."
+            return {"diagnosis_text": "Error: GEMINI_API_KEY is missing from .env file. Please add it to enable AI Disease Diagnosis.", "products": []}
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('models/gemini-2.5-flash')
         
         prompt = (
             "You are an expert Agricultural AI Agronomist specializing in plant pathology. "
-            "A farmer has provided the following description of a plant disease or symptom: \n"
+            "A farmer has provided the following description of a plant disease or symptom:\n"
             f"'{leaf_text}'\n\n"
             "Analyze this description (and the image if provided). Identify the most likely disease "
-            "or nutrient deficiency. Provide a concise, professional diagnosis formatted as:\n"
-            "**Primary Suspect:** [Disease Name]\n"
-            "**Cause:** [Fungal/Bacterial/Nutrient/Pest]\n"
-            "**Recommended Action:** [Specific treatment or fungicide/fertilizer to apply]"
+            "or nutrient deficiency. Respond ONLY with a valid JSON object (no markdown, no extra text) in the format:\n"
+            "{\n"
+            '  "primary_suspect": "Disease or deficiency name",\n'
+            '  "cause": "Fungal / Bacterial / Nutrient / Pest",\n'
+            '  "recommended_action": "Specific treatment advice",\n'
+            '  "products": [\n'
+            '    {"name": "Product name", "type": "Fungicide/Pesticide/Fertilizer", "search_query": "exact product name to search on Amazon India"},\n'
+            '    {"name": "Product name 2", "type": "Fungicide/Pesticide/Fertilizer", "search_query": "exact product name to search on Amazon India"}\n'
+            "  ]\n"
+            "}\n"
+            "Include 2-3 real, commercially available products relevant to the diagnosis. "
+            "Use the exact brand/product name as the search_query so users can find it easily."
         )
         
         try:
@@ -283,9 +293,34 @@ class DiseaseDiagnosisAgent:
                 contents.append(img)
                 
             response = model.generate_content(contents)
-            return response.text
+            raw = response.text.strip()
+            # Strip markdown code fences if present
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+            data = json.loads(raw)
+            
+            diagnosis_text = (
+                f"**Primary Suspect:** {data.get('primary_suspect', 'Unknown')}\n"
+                f"**Cause:** {data.get('cause', 'Unknown')}\n"
+                f"**Recommended Action:** {data.get('recommended_action', 'Consult a local agronomist.')}"
+            )
+            
+            products = []
+            for p in data.get('products', []):
+                query = p.get('search_query', p.get('name', ''))
+                amazon_link = f"https://www.amazon.in/s?k={query.replace(' ', '+')}"
+                products.append({
+                    "name": p.get('name'),
+                    "type": p.get('type'),
+                    "link": amazon_link
+                })
+            
+            return {"diagnosis_text": diagnosis_text, "products": products}
+        except json.JSONDecodeError:
+            # Fallback: return raw text if JSON parsing fails
+            return {"diagnosis_text": response.text, "products": []}
         except Exception as e:
-            return f"AI Diagnosis Engine Offline. Error: {str(e)}"
+            return {"diagnosis_text": f"AI Diagnosis Engine Offline. Error: {str(e)}", "products": []}
 
 class PredictiveNutrientAgent:
     @staticmethod
