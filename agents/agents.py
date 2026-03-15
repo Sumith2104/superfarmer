@@ -212,29 +212,66 @@ class CropRecommendationAgent:
         if api_key and api_key != "your_api_key_here":
             try:
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('models/gemini-2.5-flash')
-                
-                prompt = (
-                    "You are an expert Agricultural AI Agronomist advising a farmer in India. "
-                    "The farmer has provided the following information:\n"
-                    f"- Soil Type: {soil_type}\n"
-                    f"- Water / Irrigation Availability: {water_const}\n"
-                    f"- Season: {season}\n"
-                    f"- Farmer's Goal: {goal}\n\n"
-                    "Based on this, recommend the 3 best crops to grow. "
-                    "Respond ONLY with a valid JSON object (no markdown, no extra text) in the format:\n"
-                    "{\n"
-                    '  "primary_crop": "Best single crop name",\n'
-                    '  "crops": [\n'
-                    '    {"name": "Crop 1", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
-                    '    {"name": "Crop 2", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
-                    '    {"name": "Crop 3", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"}\n'
-                    "  ],\n"
-                    '  "overall_advice": "One paragraph of practical overall agronomic advice for this farmer."\n'
-                    "}"
+                model = genai.GenerativeModel(
+                    model_name='models/gemini-2.5-flash',
+                    system_instruction=(
+                        "You are Dr. Krishnamurthy, a senior agronomist at ICAR (Indian Council of Agricultural Research) "
+                        "with 30+ years of experience in Indian farming. "
+                        "You give highly accurate, evidence-based crop recommendations tailored strictly to the provided soil, water, and season data. "
+                        "You NEVER recommend a crop that doesn't suit the given conditions. "
+                        "You ALWAYS respond with ONLY a valid JSON object. No explanations, no markdown, no text outside the JSON."
+                    )
+                )
+
+                prompt = f"""A farmer in India needs crop recommendations. Their farm details are:
+
+SOIL TYPE: {soil_type}
+WATER/IRRIGATION AVAILABILITY: {water_const}
+PLANTING SEASON: {season}
+FARMER'S PRIMARY GOAL: {goal}
+
+CROP-SOIL SUITABILITY REFERENCE (use this as ground truth):
+- Black Soil: Cotton, Wheat, Soybean, Sorghum, Sunflower (moisture-retaining, good for deep-rooted crops)
+- Red Soil: Groundnut, Millet, Ragi, Pulses, Tobacco (well-drained, suit drought-tolerant crops)  
+- Alluvial Soil: Rice, Wheat, Sugarcane, Maize, Vegetables (very fertile, suits most crops)
+- Laterite Soil: Cashew, Tea, Coffee, Rubber, Tapioca (acidic, hilly, suit plantation crops)
+- Sandy Soil: Groundnut, Watermelon, Carrot, Sweet Potato, Bajra (fast-draining, drought-resistant crops)
+- Clay Soil: Rice, Jute, Lotus Root, Taro (water-retaining, suit paddy-type crops)
+
+SEASON SUITABILITY (must match):
+- Kharif (June-October, Monsoon): Rice, Cotton, Maize, Sugarcane, Soybean, Groundnut, Bajra, Jowar, Arhar
+- Rabi (November-March, Winter): Wheat, Mustard, Gram/Chickpea, Barley, Peas, Lentils, Potato, Onion
+- Zaid (March-June, Summer): Watermelon, Muskmelon, Cucumber, Bitter Gourd, Moong, Lobia, Sunflower
+
+WATER REQUIREMENT RULES:
+- Low water: Pick only drought-tolerant crops (Millet, Bajra, Groundnut, Sorghum, Pulses, Drought-resistant varieties)
+- Medium water: Most standard crops work
+- High water: Water-intensive crops preferred (Rice, Sugarcane, Jute)
+
+Given the above STRICT constraints, recommend exactly 3 crops that:
+1. Match the soil type
+2. Match the season  
+3. Match the water availability
+4. Align with the farmer's goal
+
+Respond ONLY with this JSON structure:
+{{
+  "primary_crop": "single best crop name",
+  "crops": [
+    {{"name": "Crop 1", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}},
+    {{"name": "Crop 2", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}},
+    {{"name": "Crop 3", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}}
+  ],
+  "overall_advice": "2-3 sentences of practical advice for this specific farm situation"
+}}"""
+
+                generation_config = genai.GenerationConfig(
+                    temperature=0.2,
+                    top_p=0.8,
+                    max_output_tokens=1024,
                 )
                 
-                response = model.generate_content(prompt)
+                response = model.generate_content(prompt, generation_config=generation_config)
                 raw = response.text.strip()
                 raw = _re.sub(r'^```(?:json)?\s*', '', raw)
                 raw = _re.sub(r'\s*```$', '', raw)
