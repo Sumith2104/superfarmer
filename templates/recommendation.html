@@ -2,45 +2,44 @@
 {% block content %}
 <div class="card">
     <h2>🌾 Step 2: AI Crop Recommendation</h2>
-    <p>Provide your current soil and climate parameters. Our Gemini AI Agronomist will analyze and suggest the best crops for your farm.</p>
+    <p>Answer a few simple questions about your farm. Our AI Agronomist will suggest the best crops for you.</p>
 
     <form method="POST">
         <div class="form-group">
-            <label for="soil_type">Soil Type</label>
+            <label for="soil_type">What type of soil do you have?</label>
             <select id="soil_type" name="soil_type">
-                <option value="Black">Black Soil</option>
-                <option value="Red">Red Soil</option>
-                <option value="Alluvial">Alluvial</option>
-                <option value="Laterite">Laterite</option>
+                <option value="Black">⬛ Black Soil (Dark, heavy, moisture-retaining)</option>
+                <option value="Red">🟥 Red Soil (Thin, reddish, iron-rich)</option>
+                <option value="Alluvial">🟫 Alluvial Soil (Fertile, found near rivers)</option>
+                <option value="Laterite">🟤 Laterite Soil (Rocky, hilly regions)</option>
+                <option value="Sandy">🟡 Sandy Soil (Dry, loose, drains fast)</option>
+                <option value="Clay">🔵 Clay Soil (Heavy, sticky when wet)</option>
             </select>
         </div>
         <div class="form-group">
-            <label for="water_const">Water Availability</label>
+            <label for="water_const">How much water/irrigation do you have?</label>
             <select id="water_const" name="water_const">
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
+                <option value="Low">💧 Low — Only rainwater, no irrigation</option>
+                <option value="Medium" selected>💧💧 Medium — Some irrigation available</option>
+                <option value="High">💧💧💧 High — Good irrigation / near water source</option>
             </select>
         </div>
         <div class="form-group">
-            <label for="n">Nitrogen (N) mg/kg</label>
-            <input type="number" id="n" name="n" value="45" required>
+            <label for="season">What season are you planting in?</label>
+            <select id="season" name="season">
+                <option value="Kharif (June-October, Monsoon)">☔ Kharif (June–Oct, Monsoon)</option>
+                <option value="Rabi (November-March, Winter)">❄️ Rabi (Nov–Mar, Winter)</option>
+                <option value="Zaid (March-June, Summer)">☀️ Zaid (Mar–Jun, Summer)</option>
+            </select>
         </div>
         <div class="form-group">
-            <label for="p">Phosphorus (P) mg/kg</label>
-            <input type="number" id="p" name="p" value="25" required>
-        </div>
-        <div class="form-group">
-            <label for="k">Potassium (K) mg/kg</label>
-            <input type="number" id="k" name="k" value="80" required>
-        </div>
-        <div class="form-group">
-            <label for="temp">Temperature (°C)</label>
-            <input type="number" id="temp" name="temp" value="28" required>
-        </div>
-        <div class="form-group">
-            <label for="rain">Avg Rainfall (mm)</label>
-            <input type="number" id="rain" name="rain" value="100" required>
+            <label for="goal">What is your main goal?</label>
+            <select id="goal" name="goal">
+                <option value="Maximum yield and profit">💰 Maximum yield and profit</option>
+                <option value="Low water usage and drought resistance">🌵 Low water usage (drought-resistant crops)</option>
+                <option value="Soil health improvement">🌿 Improve soil health (green manure / legumes)</option>
+                <option value="Fastest harvest time">⚡ Fastest harvest time</option>
+            </select>
         </div>
         <div class="form-group full-width">
             <button type="submit" class="btn">🤖 Get AI Recommendation</button>

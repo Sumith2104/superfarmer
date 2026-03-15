@@ -152,15 +152,11 @@ def recommendation():
         data = {
             'farmer_id': session['farmer_id'],
             'soil_type': request.form['soil_type'],
-            'n': float(request.form['n']),
-            'p': float(request.form['p']),
-            'k': float(request.form['k']),
-            'temp': float(request.form['temp']),
-            'rain': float(request.form['rain']),
-            'water_const': request.form['water_const']
+            'water_const': request.form['water_const'],
+            'season': request.form.get('season', 'Kharif (June-October, Monsoon)'),
+            'goal': request.form.get('goal', 'Maximum yield and profit'),
         }
         rec = orchestrator.route_request('recommendation', data)
-        # Store serializable version in session (dict or string)
         session['last_rec'] = rec
         session['soil_data'] = data
         return render_template('recommendation.html', rec=rec)

@@ -203,7 +203,7 @@ class IntakeAgent:
 
 class CropRecommendationAgent:
     @staticmethod
-    def recommend(farmer_id, soil_type, n, p, k, temp, rain, water_const):
+    def recommend(farmer_id, soil_type, water_const, season='Kharif (June-October, Monsoon)', goal='Maximum yield and profit', **kwargs):
         import google.generativeai as genai
         import json, re as _re
 
@@ -215,21 +215,22 @@ class CropRecommendationAgent:
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
                 prompt = (
-                    "You are an expert Agricultural AI Agronomist. A farmer has provided the following soil and climate data:\n"
+                    "You are an expert Agricultural AI Agronomist advising a farmer in India. "
+                    "The farmer has provided the following information:\n"
                     f"- Soil Type: {soil_type}\n"
-                    f"- Nitrogen (N): {n} mg/kg, Phosphorus (P): {p} mg/kg, Potassium (K): {k} mg/kg\n"
-                    f"- Temperature: {temp}°C, Avg Rainfall: {rain}mm\n"
-                    f"- Water Availability: {water_const}\n\n"
-                    "Based on this data, recommend the 3 best crops to grow. "
+                    f"- Water / Irrigation Availability: {water_const}\n"
+                    f"- Season: {season}\n"
+                    f"- Farmer's Goal: {goal}\n\n"
+                    "Based on this, recommend the 3 best crops to grow. "
                     "Respond ONLY with a valid JSON object (no markdown, no extra text) in the format:\n"
                     "{\n"
                     '  "primary_crop": "Best single crop name",\n'
                     '  "crops": [\n'
-                    '    {"name": "Crop 1", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"},\n'
-                    '    {"name": "Crop 2", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"},\n'
-                    '    {"name": "Crop 3", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"}\n'
+                    '    {"name": "Crop 1", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
+                    '    {"name": "Crop 2", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
+                    '    {"name": "Crop 3", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"}\n'
                     "  ],\n"
-                    '  "overall_advice": "One paragraph of overall agronomic advice for this farm."\n'
+                    '  "overall_advice": "One paragraph of practical overall agronomic advice for this farmer."\n'
                     "}"
                 )
                 
@@ -243,7 +244,6 @@ class CropRecommendationAgent:
                 crops = data.get('crops', [])
                 overall_advice = data.get('overall_advice', '')
                 
-                # Save comma-separated crop names for DB compatibility
                 crop_names = ", ".join(c.get('name', '') for c in crops) if crops else primary_crop
                 FluxbaseClient.execute(
                     "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)",
@@ -259,22 +259,9 @@ class CropRecommendationAgent:
             except Exception as e:
                 print(f"AI Recommendation failed, falling back to rules: {e}")
         
-        # Fallback: rule-based logic
-        recommendations = []
-        if soil_type.lower() == 'black' and water_const.lower() != 'low':
-            if float(temp) > 20 and float(n) > 40:
-                recommendations.append('Cotton')
-            recommendations.append('Wheat')
-        elif soil_type.lower() == 'alluvial':
-            if water_const.lower() == 'high':
-                recommendations.append('Rice')
-            recommendations.append('Sugarcane')
-        elif soil_type.lower() == 'red':
-            recommendations.append('Groundnut')
-            recommendations.append('Millets')
-        if not recommendations:
-            recommendations = ['Sorghum', 'Maize']
-        
+        # Fallback: simple rule-based logic
+        defaults = {'Black': ['Cotton', 'Wheat'], 'Alluvial': ['Rice', 'Sugarcane'], 'Red': ['Groundnut', 'Millets']}
+        recommendations = defaults.get(soil_type, ['Sorghum', 'Maize'])
         rec_str = ", ".join(recommendations)
         FluxbaseClient.execute(
             "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)",
