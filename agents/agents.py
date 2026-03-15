@@ -254,21 +254,56 @@ Given the above STRICT constraints, recommend exactly 3 crops that:
 3. Match the water availability
 4. Align with the farmer's goal
 
+For each crop, provide DETAILED, SPECIFIC, PRACTICAL information — not generic one-liners.
+
 Respond ONLY with this JSON structure:
 {{
   "primary_crop": "single best crop name",
   "crops": [
-    {{"name": "Crop 1", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}},
-    {{"name": "Crop 2", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}},
-    {{"name": "Crop 3", "reason": "Specific reason using soil/season/water data", "care_tip": "One actionable care tip"}}
+    {{
+      "name": "Crop 1",
+      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
+      "best_variety": "Name 1-2 specific recommended Indian varieties (e.g. Punjab-11, CO-86032)",
+      "expected_yield": "Expected yield per acre in quintals/tonnes",
+      "harvest_time": "Days or months from sowing to harvest",
+      "care_tips": [
+        "Specific sowing or land preparation tip",
+        "Irrigation or water management tip",
+        "Fertilizer schedule or pest management tip"
+      ]
+    }},
+    {{
+      "name": "Crop 2",
+      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
+      "best_variety": "Name 1-2 specific recommended Indian varieties",
+      "expected_yield": "Expected yield per acre",
+      "harvest_time": "Days or months from sowing to harvest",
+      "care_tips": [
+        "Specific sowing or land preparation tip",
+        "Irrigation or water management tip",
+        "Fertilizer schedule or pest management tip"
+      ]
+    }},
+    {{
+      "name": "Crop 3",
+      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
+      "best_variety": "Name 1-2 specific recommended Indian varieties",
+      "expected_yield": "Expected yield per acre",
+      "harvest_time": "Days or months from sowing to harvest",
+      "care_tips": [
+        "Specific sowing or land preparation tip",
+        "Irrigation or water management tip",
+        "Fertilizer schedule or pest management tip"
+      ]
+    }}
   ],
-  "overall_advice": "2-3 sentences of practical advice for this specific farm situation"
+  "overall_advice": "3-4 sentences of specific, practical agronomic advice for this exact farm situation including soil preparation, fertilizer recommendation and risk advisory"
 }}"""
 
                 generation_config = genai.GenerationConfig(
                     temperature=0.2,
                     top_p=0.8,
-                    max_output_tokens=1024,
+                    max_output_tokens=2048,
                 )
                 
                 response = model.generate_content(prompt, generation_config=generation_config)
