@@ -160,11 +160,12 @@ def recommendation():
             'water_const': request.form['water_const']
         }
         rec = orchestrator.route_request('recommendation', data)
+        # Store serializable version in session (dict or string)
         session['last_rec'] = rec
         session['soil_data'] = data
-        return render_template('recommendation.html', recommendations=rec)
+        return render_template('recommendation.html', rec=rec)
         
-    return render_template('recommendation.html', recommendations=session.get('last_rec'))
+    return render_template('recommendation.html', rec=session.get('last_rec'))
 
 @app.route('/plan', methods=['GET', 'POST'])
 @login_required

@@ -204,11 +204,65 @@ class IntakeAgent:
 class CropRecommendationAgent:
     @staticmethod
     def recommend(farmer_id, soil_type, n, p, k, temp, rain, water_const):
-        # Basic rule-based logic for demo
-        recommendations = []
+        import google.generativeai as genai
+        import json, re as _re
+
+        api_key = os.environ.get("GEMINI_API_KEY")
         
+        if api_key and api_key != "your_api_key_here":
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('models/gemini-2.5-flash')
+                
+                prompt = (
+                    "You are an expert Agricultural AI Agronomist. A farmer has provided the following soil and climate data:\n"
+                    f"- Soil Type: {soil_type}\n"
+                    f"- Nitrogen (N): {n} mg/kg, Phosphorus (P): {p} mg/kg, Potassium (K): {k} mg/kg\n"
+                    f"- Temperature: {temp}°C, Avg Rainfall: {rain}mm\n"
+                    f"- Water Availability: {water_const}\n\n"
+                    "Based on this data, recommend the 3 best crops to grow. "
+                    "Respond ONLY with a valid JSON object (no markdown, no extra text) in the format:\n"
+                    "{\n"
+                    '  "primary_crop": "Best single crop name",\n'
+                    '  "crops": [\n'
+                    '    {"name": "Crop 1", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"},\n'
+                    '    {"name": "Crop 2", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"},\n'
+                    '    {"name": "Crop 3", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip"}\n'
+                    "  ],\n"
+                    '  "overall_advice": "One paragraph of overall agronomic advice for this farm."\n'
+                    "}"
+                )
+                
+                response = model.generate_content(prompt)
+                raw = response.text.strip()
+                raw = _re.sub(r'^```(?:json)?\s*', '', raw)
+                raw = _re.sub(r'\s*```$', '', raw)
+                data = json.loads(raw)
+                
+                primary_crop = data.get('primary_crop', 'Maize')
+                crops = data.get('crops', [])
+                overall_advice = data.get('overall_advice', '')
+                
+                # Save comma-separated crop names for DB compatibility
+                crop_names = ", ".join(c.get('name', '') for c in crops) if crops else primary_crop
+                FluxbaseClient.execute(
+                    "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)",
+                    (farmer_id, crop_names)
+                )
+                
+                return {
+                    "primary_crop": primary_crop,
+                    "crops": crops,
+                    "overall_advice": overall_advice,
+                    "ai_powered": True
+                }
+            except Exception as e:
+                print(f"AI Recommendation failed, falling back to rules: {e}")
+        
+        # Fallback: rule-based logic
+        recommendations = []
         if soil_type.lower() == 'black' and water_const.lower() != 'low':
-            if temp > 20 and n > 40:
+            if float(temp) > 20 and float(n) > 40:
                 recommendations.append('Cotton')
             recommendations.append('Wheat')
         elif soil_type.lower() == 'alluvial':
@@ -218,14 +272,15 @@ class CropRecommendationAgent:
         elif soil_type.lower() == 'red':
             recommendations.append('Groundnut')
             recommendations.append('Millets')
-            
         if not recommendations:
-            recommendations = ['Sorghum', 'Maize'] # Default hardy crops
-
-        rec_str = ", ".join(recommendations)
+            recommendations = ['Sorghum', 'Maize']
         
-        FluxbaseClient.execute("INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)", (farmer_id, rec_str))
-        return rec_str
+        rec_str = ", ".join(recommendations)
+        FluxbaseClient.execute(
+            "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)",
+            (farmer_id, rec_str)
+        )
+        return {"primary_crop": recommendations[0], "crops": [{"name": c, "reason": "", "care_tip": ""} for c in recommendations], "overall_advice": "", "ai_powered": False}
 
 class CropPlannerAgent:
     @staticmethod
