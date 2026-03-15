@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+    <h2 style="color: var(--primary);">Disease & Pest Auto-Diagnosis</h2>
+    <p style="margin-bottom: 2rem;">Describe your crop's symptoms (or upload an image - coming soon) and our Generative
+        AI Vision Agent will identify the pathology.</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <div>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group full-width" style="position: relative;">
+                    <label for="leaf_text">Symptom Description</label>
+                    <textarea id="leaf_text" name="leaf_text" rows="4"
+                        placeholder="Example: The lower leaves on my tomato plant are turning pale yellow with dark brown concentric rings, and some are falling off..."></textarea>
+                    <button type="button" id="micBtn"
+                        style="position: absolute; right: 10px; bottom: 10px; background: #e2e8f0; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;"
+                        title="Tap to Speak">
+                        🎤
+                    </button>
+                </div>
+
+                <div class="form-group full-width" style="margin-top: 1rem;">
+                    <label for="leaf_image">Upload Leaf Image</label>
+                    <input type="file" id="leaf_image" name="leaf_image" accept="image/*">
+                </div>
+
+                <div class="form-group full-width" style="margin-top: 1rem;">
+                    <button type="submit" class="btn" style="width: 100%;">Run AI Diagnosis</button>
+                </div>
+            </form>
+        </div>
+
+        <div>
+            {% if diagnosis %}
+            <div
+                style="background-color: #f0fdf4; border-left: 4px solid var(--primary); padding: 1.5rem; border-radius: 8px; height: 100%;">
+                <h3 style="margin-bottom: 1rem; color: #166534;">Diagnosis Result</h3>
+                <div style="line-height: 1.6;">
+                    {# Convert basic markdown bold headers to HTML #}
+                    {{ diagnosis | replace("**", "<strong>") | replace(" :", ":</strong>") | replace(":", ":</strong>")
+                    | replace("\n", "<br>") | safe }}
+                </div>
+            </div>
+            {% else %}
+            <div
+                style="background-color: #f8fafc; border: 2px dashed #cbd5e1; padding: 1.5rem; border-radius: 8px; height: 100%; display: flex; align-items: center; justify-content: center; color: #64748b; text-align: center;">
+                Awaiting input.<br>The AI Engine (Gemini 1.5 Flash) is ready.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    const micBtn = document.getElementById('micBtn');
+    const leafText = document.getElementById('leaf_text');
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+
+        // Settings for voice recognition
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = function () {
+            micBtn.style.backgroundColor = '#fecaca'; // Red indicating recording
+            micBtn.innerHTML = '🛑';
+        };
+
+        recognition.onresult = function (event) {
+            const transcript = event.results[0][0].transcript;
+            // Append transcribed text to whatever is already there
+            leafText.value = leafText.value + (leafText.value ? ' ' : '') + transcript;
+        };
+
+        recognition.onerror = function (event) {
+            console.error('Speech recognition error', event.error);
+            alert("Microphone error: " + event.error);
+        };
+
+        recognition.onend = function () {
+            micBtn.style.backgroundColor = '#e2e8f0';
+            micBtn.innerHTML = '🎤';
+        };
+
+        micBtn.addEventListener('click', () => {
+            if (micBtn.innerHTML === '🛑') {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error("Could not start recognition:", e);
+                }
+            }
+        });
+    } else {
+        micBtn.style.display = 'none';
+        console.warn("Speech recognition not supported in this browser.");
+    }
+</script>
+{% endblock %}

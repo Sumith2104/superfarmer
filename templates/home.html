@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="hero">
+    <h1>Welcome to <span>SuperFarmer</span></h1>
+    <p>A proactive agricultural intelligence system using Multi-Agent Architecture and Machine Learning to optimize your
+        yield.</p>
+    <a href="{{ url_for('intake') }}" class="btn">Get Started Now</a>
+</div>
+
+<div class="features-grid">
+    <div class="card">
+        <h3>🌱 Smart Profiling</h3>
+        <p>Our Intake Agent sets up your farm's profile by analyzing land size, location, and farming goals.</p>
+    </div>
+    <div class="card">
+        <h3>📈 Yield Optimization</h3>
+        <p>The Recommendation & Planner Agents provide you with optimal crop choices and detailed daily schedules.</p>
+    </div>
+    <div class="card">
+        <h3>🔍 Disease Diagnosis</h3>
+        <p>Describe your crop's state, and our Diagnostic Agent uses advanced context to recommend immediate treatments.
+        </p>
+    </div>
+    <div class="card">
+        <h3>⚠️ Predictive Nutrients</h3>
+        <p>Machine Learning constantly predicts nutrient deficiency risks before they appear, triggering our Dynamic
+            Replanner.</p>
+    </div>
+</div>
+{% endblock %}

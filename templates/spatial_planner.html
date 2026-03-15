@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+    <h2 style="color: var(--primary);">Spatial Intercropping Twin</h2>
+    <p style="margin-bottom: 2rem;">Generate an optimized multi-crop layout utilizing hexagonal algorithms for your
+        field dimensions to maximize yield and natural symbiosis.</p>
+
+    <div class="form-group full-width" style="max-width: 400px; margin: 0 auto 1.5rem auto;">
+        <label for="main_crop">Select Primary Crop</label>
+        <select id="main_crop">
+            <option value="Corn">Corn</option>
+            <option value="Tomatoes">Tomatoes</option>
+            <option value="Wheat">Wheat</option>
+            <option value="Sugarcane">Sugarcane</option>
+        </select>
+        <button class="btn" onclick="generateTwin()" style="width: 100%; margin-top: 1rem;">Generate Simulator
+            Map</button>
+    </div>
+
+    <div style="margin-top: 1.5rem; text-align: center; overflow-x: auto;">
+        <!-- Canvas representing the spatial land matrix -->
+        <canvas id="farmCanvas" width="800" height="500"
+            style="border: 2px solid var(--border); border-radius: 8px; background-color: #f8fafc; max-width: 100%;"></canvas>
+    </div>
+
+    <div id="analysis_result"
+        style="margin-top: 1.5rem; padding: 1.5rem; background-color: #f0fdf4; border-left: 4px solid var(--primary); border-radius: 8px; display: none; line-height: 1.6;">
+        <!-- Analysis response injected via fetch -->
+    </div>
+</div>
+
+<script>
+    // Draw initial empty state
+    window.onload = function () {
+        const canvas = document.getElementById('farmCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '20px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Select a crop and click Generate to see your Digital Twin.', canvas.width / 2, canvas.height / 2);
+    }
+
+    function generateTwin() {
+        const crop = document.getElementById('main_crop').value;
+        const canvas = document.getElementById('farmCanvas');
+        const ctx = canvas.getContext('2d');
+        const analysisDiv = document.getElementById('analysis_result');
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw loading state
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '20px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Simulating Agent Algorithms...', canvas.width / 2, canvas.height / 2);
+
+        analysisDiv.style.display = 'none';
+
+        fetch("{{ url_for('spatial_planner') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                width: canvas.width,
+                height: canvas.height,
+                main_crop: crop
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                // Clear loading
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw field background
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw grid points
+                data.layout.forEach(node => {
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI, false);
+                    ctx.fillStyle = node.color;
+                    ctx.fill();
+
+                    // Add a subtle stroke for depth
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                    ctx.stroke();
+                });
+
+                // Show analysis reasoning
+                analysisDiv.style.display = 'block';
+
+                // Format markdown bold string as HTML
+                let formattedHtml = data.analysis.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+                analysisDiv.innerHTML = formattedHtml;
+            })
+            .catch(err => {
+                console.error(err);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText('Simulation failed to load.', canvas.width / 2, canvas.height / 2);
+            });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+    <h2>🔍 Step 4: ML Nutrient Predictor</h2>
+    <p>Simulate sensor data below. Our Predictive Agent uses a Random Forest model to analyze history and forecast risk
+        before physical symptoms appear.</p>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="n">Current Nitrogen (N)</label>
+            <input type="number" id="n" name="n" value="30" required>
+        </div>
+        <div class="form-group">
+            <label for="p">Current Phosphorus (P)</label>
+            <input type="number" id="p" name="p" value="15" required>
+        </div>
+        <div class="form-group">
+            <label for="k">Current Potassium (K)</label>
+            <input type="number" id="k" name="k" value="50" required>
+        </div>
+        <div class="form-group">
+            <label for="moisture">Soil Moisture (%)</label>
+            <input type="number" id="moisture" name="moisture" value="25" required>
+        </div>
+        <div class="form-group">
+            <label for="temp">Soil Temp (°C)</label>
+            <input type="number" id="temp" name="temp" value="32" required>
+        </div>
+        <div class="form-group">
+            <label for="growth_rate">Growth Rate (cm/day)</label>
+            <input type="number" step="0.1" id="growth_rate" name="growth_rate" value="1.2" required>
+        </div>
+        <div class="form-group">
+            <label for="days_fert">Days since last Fertilizer</label>
+            <input type="number" id="days_fert" name="days_fert" value="45" required>
+        </div>
+        <div class="form-group" style="display: flex; align-items: flex-end;">
+            <button type="submit" class="btn" style="width: 100%;">Run Predictive Model</button>
+        </div>
+    </form>
+
+    {% if risk %}
+    <div class="result-box risk-{{ risk.risk_level|lower }}" style="margin-top: 30px;">
+        <h3>Prediction Results</h3>
+        <p><strong>Risk Level:</strong> {{ risk.risk_level }} ({{ risk.risk_probability }}%)</p>
+        <p><strong>AI Suggestion:</strong> {{ risk.suggestion }}</p>
+
+        {% if risk.trigger_replanner %}
+        <div
+            style="margin-top: 15px; padding: 15px; background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px;">
+            <strong style="color: var(--danger);">⚡ Alert:</strong> The Dynamic Replanner Agent was triggered due to
+            High Risk!
+            <p>{{ risk.replanner_status }}</p>
+            <a href="{{ url_for('plan') }}" class="btn btn-secondary" style="margin-top: 10px;">View Updated Plan</a>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
