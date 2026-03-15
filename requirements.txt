@@ -1,5 +1,4 @@
 flask
-mysql-connector-python
 scikit-learn
 pandas
 numpy
@@ -7,3 +6,6 @@ joblib
 fpdf
 python-dotenv
 gunicorn
+requests
+google-generativeai
+Pillow
