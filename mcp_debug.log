@@ -1,0 +1,58 @@
+TOOL CALL: execute_sql
+ARGS: {'query': "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (5, 'Rice, Soybean, Cotton');"}
+SUCCESS: Query executed successfully.
+Result: []
+TOOL CALL: execute_sql
+ARGS: {'query': "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (5, 'Rice, Maize, Soybean');"}
+SUCCESS: Query executed successfully.
+Result: []
+FINISHED. Final Response: ```json
+{
+  "primary_crop": "Rice",
+  "crops": [
+    {
+      "name": "Rice (Paddy)",
+      "reason": "Black soils are ideal due to their excellent water retention capacity, which is crucial for rice cultivation. High water availability during the Kharif season directly supports its growth, leading to high yields and profitability.",
+      "care_tip": "Ensure proper bunding and puddling of fields to maintain standing water, and implement timely nutrient management, especially nitrogen, for optimal growth."
+    },
+    {
+      "name": "Maize (Corn)",
+      "reason": "Maize is a versatile Kharif crop that performs well in fertile black soils with good drainage. High irrigation availability can buffer against dry spells within the monsoon, ensuring consistent growth and maximizing yield potential and profit.",
+      "care_tip": "Maintain adequate plant spacing and manage weeds effectively, as maize is highly sensitive to early-stage competition. Provide balanced fertilization based on soil test results."
+    },
+    {
+      "name": "Soybean",
+      "reason": "Soybean is well-suited for black soils, which support its robust root development and nutrient uptake. Being a leguminous crop, it also enhances soil fertility. High water availability during the monsoon promotes healthy growth, contributing to both yield and profitability.",
+      "care_tip": "Focus on good seedbed preparation and use high-quality, treated seeds. Monitor for pest and disease outbreaks, particularly during humid periods, and ensure timely harvesting to prevent shattering losses."
+    }
+  ],
+  "overall_advice": "For maximum yield and profit, consider integrating these recommended crops with best agricultural practices. Regular soil testing will help tailor nutrient management plans. Pay close attention to pest and disease surveillance, especially during the humid Kharif season, and adopt integrated pest management strategies. Given high water availability, ensure efficient irrigation techniques are used to prevent water wastage while meeting crop needs. Diversification with these three crops can also help spread risk and optimize resource utilization."
+}
+```
+TOOL CALL: execute_sql
+ARGS: {'query': "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (5, 'Cotton,Soybean,Maize');"}
+SUCCESS: Query executed successfully.
+Result: []
+FINISHED. Final Response: ```json
+{
+  "primary_crop": "Cotton",
+  "crops": [
+    {
+      "name": "Cotton",
+      "reason": "Black soil is excellent for cotton cultivation due to its high clay content and water retention, and it's a profitable cash crop well-suited for the Kharif season with medium water availability.",
+      "care_tip": "Implement timely pest management, especially against bollworms, to protect developing bolls and maximize lint yield."
+    },
+    {
+      "name": "Soybean",
+      "reason": "Soybean thrives in black soils during the Kharif season, offering good returns as a dual-purpose crop (oil and protein), and it has moderate water requirements making it suitable for medium irrigation availability.",
+      "care_tip": "Ensure early and effective weed control to minimize competition for nutrients and sunlight, which is crucial for establishing a strong stand."
+    },
+    {
+      "name": "Maize",
+      "reason": "Maize is a high-yielding crop suitable for black soil and benefits from monsoon rains during the Kharif season. It offers good profitability with medium water availability, provided there is good drainage.",
+      "care_tip": "Apply nitrogen fertilizer at critical growth stages, such as knee-high and tasseling, to support vigorous growth and optimize grain fill."
+    }
+  ],
+  "overall_advice": "For maximum yield and profit in black soil during the Kharif season with medium water availability, focus on integrated nutrient management to leverage the soil's natural fertility while supplementing as needed. Implement proper water management techniques to efficiently utilize monsoon rains and supplement with irrigation during dry spells. Prioritize timely pest and disease monitoring and control, and consider crop rotation in subsequent seasons to maintain soil health and break pest cycles. Regular soil testing will further help in fine-tuning fertilization strategies for sustained productivity."
+}
+```

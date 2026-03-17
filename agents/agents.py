@@ -204,110 +204,54 @@ class IntakeAgent:
 class CropRecommendationAgent:
     @staticmethod
     def recommend(farmer_id, soil_type, water_const, season='Kharif (June-October, Monsoon)', goal='Maximum yield and profit', **kwargs):
-        import google.generativeai as genai
         import json, re as _re
+        import os
+        from mcp_gemini_bridge import MCPGeminiBridge
+        import google.generativeai as genai
 
         api_key = os.environ.get("GEMINI_API_KEY")
         
         if api_key and api_key != "your_api_key_here":
             try:
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel(
-                    model_name='models/gemini-2.5-flash',
-                    system_instruction=(
-                        "You are Dr. Krishnamurthy, a senior agronomist at ICAR (Indian Council of Agricultural Research) "
-                        "with 30+ years of experience in Indian farming. "
-                        "You give highly accurate, evidence-based crop recommendations tailored strictly to the provided soil, water, and season data. "
-                        "You NEVER recommend a crop that doesn't suit the given conditions. "
-                        "You ALWAYS respond with ONLY a valid JSON object. No explanations, no markdown, no text outside the JSON."
-                    )
-                )
-
-                prompt = f"""A farmer in India needs crop recommendations. Their farm details are:
-
-SOIL TYPE: {soil_type}
-WATER/IRRIGATION AVAILABILITY: {water_const}
-PLANTING SEASON: {season}
-FARMER'S PRIMARY GOAL: {goal}
-
-CROP-SOIL SUITABILITY REFERENCE (use this as ground truth):
-- Black Soil: Cotton, Wheat, Soybean, Sorghum, Sunflower (moisture-retaining, good for deep-rooted crops)
-- Red Soil: Groundnut, Millet, Ragi, Pulses, Tobacco (well-drained, suit drought-tolerant crops)  
-- Alluvial Soil: Rice, Wheat, Sugarcane, Maize, Vegetables (very fertile, suits most crops)
-- Laterite Soil: Cashew, Tea, Coffee, Rubber, Tapioca (acidic, hilly, suit plantation crops)
-- Sandy Soil: Groundnut, Watermelon, Carrot, Sweet Potato, Bajra (fast-draining, drought-resistant crops)
-- Clay Soil: Rice, Jute, Lotus Root, Taro (water-retaining, suit paddy-type crops)
-
-SEASON SUITABILITY (must match):
-- Kharif (June-October, Monsoon): Rice, Cotton, Maize, Sugarcane, Soybean, Groundnut, Bajra, Jowar, Arhar
-- Rabi (November-March, Winter): Wheat, Mustard, Gram/Chickpea, Barley, Peas, Lentils, Potato, Onion
-- Zaid (March-June, Summer): Watermelon, Muskmelon, Cucumber, Bitter Gourd, Moong, Lobia, Sunflower
-
-WATER REQUIREMENT RULES:
-- Low water: Pick only drought-tolerant crops (Millet, Bajra, Groundnut, Sorghum, Pulses, Drought-resistant varieties)
-- Medium water: Most standard crops work
-- High water: Water-intensive crops preferred (Rice, Sugarcane, Jute)
-
-Given the above STRICT constraints, recommend exactly 3 crops that:
-1. Match the soil type
-2. Match the season  
-3. Match the water availability
-4. Align with the farmer's goal
-
-For each crop, provide DETAILED, SPECIFIC, PRACTICAL information — not generic one-liners.
-
-Respond ONLY with this JSON structure:
-{{
-  "primary_crop": "single best crop name",
-  "crops": [
-    {{
-      "name": "Crop 1",
-      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
-      "best_variety": "Name 1-2 specific recommended Indian varieties (e.g. Punjab-11, CO-86032)",
-      "expected_yield": "Expected yield per acre in quintals/tonnes",
-      "harvest_time": "Days or months from sowing to harvest",
-      "care_tips": [
-        "Specific sowing or land preparation tip",
-        "Irrigation or water management tip",
-        "Fertilizer schedule or pest management tip"
-      ]
-    }},
-    {{
-      "name": "Crop 2",
-      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
-      "best_variety": "Name 1-2 specific recommended Indian varieties",
-      "expected_yield": "Expected yield per acre",
-      "harvest_time": "Days or months from sowing to harvest",
-      "care_tips": [
-        "Specific sowing or land preparation tip",
-        "Irrigation or water management tip",
-        "Fertilizer schedule or pest management tip"
-      ]
-    }},
-    {{
-      "name": "Crop 3",
-      "reason": "2-3 sentences explaining exactly WHY this crop suits this soil, season and water level",
-      "best_variety": "Name 1-2 specific recommended Indian varieties",
-      "expected_yield": "Expected yield per acre",
-      "harvest_time": "Days or months from sowing to harvest",
-      "care_tips": [
-        "Specific sowing or land preparation tip",
-        "Irrigation or water management tip",
-        "Fertilizer schedule or pest management tip"
-      ]
-    }}
-  ],
-  "overall_advice": "3-4 sentences of specific, practical agronomic advice for this exact farm situation including soil preparation, fertilizer recommendation and risk advisory"
-}}"""
-
-                generation_config = genai.GenerationConfig(
-                    temperature=0.2,
-                    top_p=0.8,
-                    max_output_tokens=2048,
+                
+                system_instruction = (
+                    "You are an expert Agricultural AI Agronomist advising a farmer. "
+                    "You have an SQL tool connected to the Superfarmer database. "
+                    "When you generate your recommendation, you MUST autonomously use your `execute_sql` tool "
+                    f"to perform exactly this query before you give your final answer:\n"
+                    f"INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES ({farmer_id}, 'comma_separated_crop_names_here');\n"
+                    "Make sure you execute the tool call successfully."
                 )
                 
-                response = model.generate_content(prompt, generation_config=generation_config)
-                raw = response.text.strip()
+                prompt = (
+                    "The farmer has provided the following information:\n"
+                    f"- Soil Type: {soil_type}\n"
+                    f"- Water / Irrigation Availability: {water_const}\n"
+                    f"- Season: {season}\n"
+                    f"- Farmer's Goal: {goal}\n\n"
+                    "Based on this, recommend the 3 best crops to grow. "
+                    "Respond ONLY with a valid JSON object (no markdown, no extra text) as your final response to me in the format:\n"
+                    "{\n"
+                    '  "primary_crop": "Best single crop name",\n'
+                    '  "crops": [\n'
+                    '    {"name": "Crop 1", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
+                    '    {"name": "Crop 2", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"},\n'
+                    '    {"name": "Crop 3", "reason": "Why this crop suits the conditions", "care_tip": "One key care tip for this farmer"}\n'
+                    "  ],\n"
+                    '  "overall_advice": "One paragraph of practical overall agronomic advice for this farmer."\n'
+                    "}"
+                )
+                
+                # Path to our local MCP Server
+                mcp_path = os.path.join(os.path.dirname(__file__), '..', 'fluxbase_mcp.py')
+                bridge = MCPGeminiBridge(mcp_path)
+                
+                # This call will automatically trigger Gemini, which will read the prompt, decide to 
+                # use the execute_sql tool, wait for the SQL result, and then return the final JSON.
+                raw = bridge.execute_prompt(prompt, system_instruction=system_instruction)
+                
+                raw = raw.strip()
                 raw = _re.sub(r'^```(?:json)?\s*', '', raw)
                 raw = _re.sub(r'\s*```$', '', raw)
                 data = json.loads(raw)
@@ -316,11 +260,8 @@ Respond ONLY with this JSON structure:
                 crops = data.get('crops', [])
                 overall_advice = data.get('overall_advice', '')
                 
-                crop_names = ", ".join(c.get('name', '') for c in crops) if crops else primary_crop
-                FluxbaseClient.execute(
-                    "INSERT INTO crop_recommendations (farmer_id, recommended_crops) VALUES (?, ?)",
-                    (farmer_id, crop_names)
-                )
+                # NOTE: We entirely removed the hardcoded FluxbaseClient.execute() INSERT from Python! 
+                # The AI did it autonomously inside `bridge.execute_prompt()`.
                 
                 return {
                     "primary_crop": primary_crop,
@@ -332,6 +273,7 @@ Respond ONLY with this JSON structure:
                 print(f"AI Recommendation failed, falling back to rules: {e}")
         
         # Fallback: simple rule-based logic
+        from database.fluxbase import FluxbaseClient
         defaults = {'Black': ['Cotton', 'Wheat'], 'Alluvial': ['Rice', 'Sugarcane'], 'Red': ['Groundnut', 'Millets']}
         recommendations = defaults.get(soil_type, ['Sorghum', 'Maize'])
         rec_str = ", ".join(recommendations)

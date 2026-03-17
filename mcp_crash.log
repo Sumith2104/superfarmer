@@ -1,0 +1,44 @@
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\agents\agents.py", line 252, in recommend
+  |     raw = bridge.execute_prompt(prompt, system_instruction=system_instruction)
+  |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\mcp_gemini_bridge.py", line 129, in execute_prompt
+  |     return loop.run_until_complete(self._run_gemini_with_mcp(prompt, system_instruction))
+  |            ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "C:\Users\sumit\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py", line 719, in run_until_complete
+  |     return future.result()
+  |            ~~~~~~~~~~~~~^^
+  |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\mcp_gemini_bridge.py", line 20, in _run_gemini_with_mcp
+  |     async with stdio_client(server_params) as (read, write):
+  |                ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  |   File "C:\Users\sumit\AppData\Local\Programs\Python\Python314\Lib\contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\.venv\Lib\site-packages\mcp\client\stdio\__init__.py", line 183, in stdio_client
+  |     anyio.create_task_group() as tg,
+  |     ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Exception Group Traceback (most recent call last):
+    |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\.venv\Lib\site-packages\mcp\client\stdio\__init__.py", line 189, in stdio_client
+    |     yield read_stream, write_stream
+    |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\mcp_gemini_bridge.py", line 21, in _run_gemini_with_mcp
+    |     async with ClientSession(read, write) as session:
+    |                ~~~~~~~~~~~~~^^^^^^^^^^^^^
+    |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\.venv\Lib\site-packages\mcp\shared\session.py", line 238, in __aexit__
+    |     return await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+    |     raise BaseExceptionGroup(
+    |         "unhandled errors in a TaskGroup", self._exceptions
+    |     ) from None
+    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+    +-+---------------- 1 ----------------
+      | Traceback (most recent call last):
+      |   File "C:\Users\sumit\Downloads\superfarmer\superfarmer\mcp_gemini_bridge.py", line 106, in _run_gemini_with_mcp
+      |     genai.types.Part.from_function_response(
+      |     ^^^^^^^^^^^^^^^^
+      | AttributeError: module 'google.generativeai.types' has no attribute 'Part'
+      +------------------------------------

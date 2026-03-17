@@ -56,60 +56,29 @@
             <h3 style="margin: 0; color: var(--primary);">Crop Recommendations</h3>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
             {% for crop in rec.crops %}
             <div style="background: {% if loop.first %}linear-gradient(135deg, #f0fdf4, #dcfce7){% else %}#f8fafc{% endif %}; border: 1px solid {% if loop.first %}#86efac{% else %}#e2e8f0{% endif %}; border-radius: 12px; padding: 1.25rem; position: relative;">
                 {% if loop.first %}
-                <span style="position: absolute; top: -10px; right: 14px; background: #16a34a; color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px;">⭐ TOP PICK</span>
+                <span style="position: absolute; top: -10px; right: 10px; background: #16a34a; color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 999px;">TOP PICK</span>
                 {% endif %}
-
-                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
-                    <span style="font-size: 2rem;">
-                        {% if 'Cotton' in crop.name %}🌸
-                        {% elif 'Rice' in crop.name or 'Paddy' in crop.name %}🍚
-                        {% elif 'Wheat' in crop.name %}🌾
-                        {% elif 'Sugarcane' in crop.name %}🎋
-                        {% elif 'Maize' in crop.name or 'Corn' in crop.name %}🌽
-                        {% elif 'Groundnut' in crop.name %}🥜
-                        {% elif 'Soybean' in crop.name %}🫘
-                        {% elif 'Watermelon' in crop.name or 'Melon' in crop.name %}🍉
-                        {% elif 'Potato' in crop.name %}🥔
-                        {% elif 'Onion' in crop.name %}🧅
-                        {% elif 'Millet' in crop.name or 'Sorghum' in crop.name or 'Bajra' in crop.name %}🌿
-                        {% elif 'Mustard' in crop.name %}🌼
-                        {% else %}🌱{% endif %}
-                    </span>
-                    <div>
-                        <div style="font-size: 1.15rem; font-weight: 700; color: #1e293b;">{{ crop.name }}</div>
-                        {% if crop.best_variety %}
-                        <div style="font-size: 0.78rem; color: #64748b;">🌿 Variety: <strong>{{ crop.best_variety }}</strong></div>
-                        {% endif %}
-                    </div>
-                    {% if crop.expected_yield or crop.harvest_time %}
-                    <div style="margin-left: auto; text-align: right; font-size: 0.75rem; color: #64748b; line-height: 1.6;">
-                        {% if crop.expected_yield %}<div>📦 {{ crop.expected_yield }}</div>{% endif %}
-                        {% if crop.harvest_time %}<div>🗓️ {{ crop.harvest_time }}</div>{% endif %}
-                    </div>
-                    {% endif %}
+                <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">
+                    {% if 'Cotton' in crop.name %}🌸
+                    {% elif 'Rice' in crop.name or 'Paddy' in crop.name %}🍚
+                    {% elif 'Wheat' in crop.name %}🌾
+                    {% elif 'Sugarcane' in crop.name %}🎋
+                    {% elif 'Maize' in crop.name or 'Corn' in crop.name %}🌽
+                    {% elif 'Groundnut' in crop.name %}🥜
+                    {% elif 'Soybean' in crop.name %}🫘
+                    {% elif 'Millet' in crop.name or 'Sorghum' in crop.name %}🌿
+                    {% else %}🌱{% endif %}
                 </div>
-
+                <div style="font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 0.4rem;">{{ crop.name }}</div>
                 {% if crop.reason %}
-                <div style="font-size: 0.85rem; color: #334155; margin-bottom: 0.75rem; line-height: 1.6; border-left: 3px solid {% if loop.first %}#16a34a{% else %}#94a3b8{% endif %}; padding-left: 0.65rem;">
-                    {{ crop.reason }}
-                </div>
+                <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.75rem; line-height: 1.4;">{{ crop.reason }}</div>
                 {% endif %}
-
-                {% if crop.care_tips %}
-                <div style="background: rgba(255,255,255,0.8); border-radius: 8px; padding: 0.6rem 0.8rem;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #166534; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em;">💡 Care Tips</div>
-                    <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.82rem; color: #374151; line-height: 1.8;">
-                        {% for tip in crop.care_tips %}
-                        <li>{{ tip }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% elif crop.care_tip %}
-                <div style="background: rgba(255,255,255,0.7); border-left: 3px solid #22c55e; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.82rem; color: #166534;">
+                {% if crop.care_tip %}
+                <div style="background: rgba(255,255,255,0.7); border-left: 3px solid #22c55e; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.78rem; color: #166534;">
                     💡 {{ crop.care_tip }}
                 </div>
                 {% endif %}
