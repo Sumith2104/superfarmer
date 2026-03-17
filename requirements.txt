@@ -9,3 +9,5 @@ gunicorn
 requests
 google-generativeai
 Pillow
+werkzeug
+mcp[cli]
