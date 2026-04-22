@@ -108,7 +108,7 @@ export default async function Home() {
         <section>
           <Dashboard />
           <div style={{ marginTop: '3rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.8rem' }}>
+            <h3 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
               All Tools
             </h3>
             <div className="card-grid">
