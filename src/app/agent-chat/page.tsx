@@ -1,5 +1,7 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { speak, startListening, stopListening, isSpeechSupported, getLangCode } from '@/lib/voice';
+import { MicIcon, SpeakIcon, CropIcon, DiseaseIcon, MoneyIcon, PlanIcon, LeafIcon, CalendarIcon, SendIcon, CameraIcon, CheckIcon } from '@/components/Icons';
 
 interface Message {
   role: 'user' | 'agent';
@@ -15,12 +17,12 @@ interface ThinkingStep {
 }
 
 const QUICK_PROMPTS = [
-  { emoji: '🌾', label: 'What to plant?', text: 'What crop should I plant this season based on my soil and water?' },
-  { emoji: '🐛', label: 'Yellow leaves', text: 'My crop leaves are turning yellow and falling off. What disease could this be?' },
-  { emoji: '💰', label: 'Mandi price', text: 'What is the current mandi price of wheat and rice?' },
-  { emoji: '📋', label: 'My crop plan', text: 'Show me my current crop plan and what I should do next.' },
-  { emoji: '🌱', label: 'Farm status', text: 'How is my farm doing overall? Give me a complete status update.' },
-  { emoji: '📝', label: 'Set reminder', text: 'Remind me to irrigate my fields on Thursday morning.' },
+  { Icon: CropIcon,    color: '#4ade80', label: 'What to plant?',  text: 'What crop should I plant this season based on my soil and water?' },
+  { Icon: DiseaseIcon, color: '#f87171', label: 'Yellow leaves',   text: 'My crop leaves are turning yellow and falling off. What disease could this be?' },
+  { Icon: MoneyIcon,   color: '#fbbf24', label: 'Mandi price',     text: 'What is the current mandi price of wheat and rice?' },
+  { Icon: PlanIcon,    color: '#a78bfa', label: 'My crop plan',    text: 'Show me my current crop plan and what I should do next.' },
+  { Icon: LeafIcon,    color: '#34d399', label: 'Farm status',     text: 'How is my farm doing overall? Give me a complete status update.' },
+  { Icon: CalendarIcon,color: '#60a5fa', label: 'Set reminder',    text: 'Remind me to irrigate my fields on Thursday morning.' },
 ];
 
 const TOOL_ICONS: Record<string, string> = {
@@ -61,8 +63,59 @@ export default function AgentChatPage() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   // In-session conversation history — sent to Groq on every turn so it remembers the current chat
   const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [dictating, setDictating] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const srRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setVoiceSupported(isSpeechSupported()); }, []);
+
+  /** Parse numbered/bulleted steps from an AI response */
+  function parseSteps(text: string): string[] {
+    return text.split('\n')
+      .map(l => l.trim())
+      .filter(l => /^(\d+[.)]\s|[-*•]\s)/.test(l))
+      .map(l => l.replace(/^(\d+[.)]\s|[-*•]\s)/, '').trim())
+      .filter(l => l.length > 5);
+  }
+
+  /** Start full-screen dictation mode */
+  const startDictation = useCallback(() => {
+    setDictating(true);
+    setLiveTranscript('');
+    srRef.current = startListening(
+      (text) => { setLiveTranscript(text); setDictating(false); sendMessage(text); },
+      () => setDictating(false),
+      getLangCode('en')
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stopDictation = useCallback(() => {
+    stopListening(srRef.current); srRef.current = null;
+    setDictating(false); setLiveTranscript('');
+  }, []);
+
+  const speakMessage = useCallback((text: string) => {
+    speak(text, getLangCode('en'));
+  }, []);
+
+
+  // Auto-send if navigated from voice assistant with ?q= param
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    if (q) {
+      // Clean URL without triggering re-render
+      window.history.replaceState({}, '', '/agent-chat');
+      setTimeout(() => sendMessage(q), 600);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Set greeting timestamp on client only to avoid SSR/client mismatch
@@ -302,37 +355,59 @@ export default function AgentChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick prompts — shown only on first message */}
+      {/* Quick prompts */}
       {showQuickPrompts && (
         <div style={{ flexShrink: 0, marginBottom: '0.75rem' }}>
-          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 700, letterSpacing: '0.06em' }}>⚡ QUICK QUESTIONS</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.45rem' }}>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 700, letterSpacing: '0.06em' }}>⚡ QUICK QUESTIONS</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem' }}>
             {QUICK_PROMPTS.map((q) => (
               <button
                 key={q.label}
                 onClick={() => sendMessage(q.text)}
                 disabled={loading}
                 style={{
-                  background: 'rgba(124,58,237,0.06)',
-                  border: '1px solid rgba(124,58,237,0.2)',
-                  borderRadius: 10,
-                  padding: '0.6rem 0.75rem',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '0.82rem',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  transition: 'all 0.15s',
+                  background: `${q.color}0d`,
+                  border: `1px solid ${q.color}30`,
+                  borderRadius: 10, padding: '0.6rem 0.75rem',
+                  color: 'var(--text)', cursor: 'pointer',
+                  textAlign: 'left', fontSize: '0.8rem', fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  transition: 'all 0.15s', minHeight: 44,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(124,58,237,0.14)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.4)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.2)'; }}
               >
-                <span style={{ fontSize: '1.1rem' }}>{q.emoji}</span>
+                <q.Icon size={16} color={q.color} />
                 <span>{q.label}</span>
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dictation Modal */}
+      {dictating && (
+        <div
+          onClick={stopDictation}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(3,10,5,0.92)', backdropFilter: 'blur(12px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem',
+          }}
+        >
+          <div style={{ width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg,#dc2626,#b91c1c)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 16px rgba(220,38,38,0.15)', animation: 'voice-listen 1s ease-in-out infinite' }}>
+            <MicIcon size={44} color="#fff" />
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', marginBottom: '0.3rem' }}>Listening…</div>
+            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)' }}>Tap anywhere to cancel</div>
+          </div>
+          {liveTranscript && (
+            <div style={{ background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(74,222,128,0.35)', borderRadius: 14, padding: '0.85rem 1.25rem', maxWidth: '80vw', textAlign: 'center', fontSize: '1rem', color: '#86efac', lineHeight: 1.5 }}>
+              &ldquo;{liveTranscript}&rdquo;
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center', height: 36 }}>
+            {[0,1,2,3,4].map(i => (
+              <div key={i} style={{ width: 4, borderRadius: 999, background: '#f87171', animation: 'wave 1s ease-in-out infinite', animationDelay: `${i*0.1}s` }} />
             ))}
           </div>
         </div>
@@ -344,9 +419,11 @@ export default function AgentChatPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imagePreview} alt="attached" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
           <div style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <span style={{ color: '#a78bfa', fontWeight: 700 }}>📷 Image attached</span> — AI will use Gemini Vision to analyse this photo
+            <span style={{ color: '#a78bfa', fontWeight: 700 }}>Image attached</span> — AI will use Gemini Vision to analyse this photo
           </div>
-          <button onClick={clearImage} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '1.1rem', padding: '0 0.25rem' }} title="Remove image">✕</button>
+          <button onClick={clearImage} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '0 0.25rem', display: 'flex' }} title="Remove image">
+            <CheckIcon size={16} color="#f87171" />
+          </button>
         </div>
       )}
 
@@ -356,51 +433,39 @@ export default function AgentChatPage() {
         style={{ flexShrink: 0, display: 'flex', gap: '0.5rem', alignItems: 'center' }}
       >
         {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={handleImageAttach}
-        />
-        {/* Attach button */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={loading}
-          title="Attach leaf/crop photo for AI vision analysis"
-          style={{
-            flexShrink: 0,
-            width: 44, height: 44,
-            borderRadius: '50%',
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageAttach} />
+
+        {/* Camera attach button */}
+        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={loading}
+          title="Attach crop photo" style={{
+            flexShrink: 0, width: 44, height: 44, borderRadius: '50%',
             background: imagePreview ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.07)',
             border: `1px solid ${imagePreview ? 'rgba(124,58,237,0.6)' : 'var(--glass-border)'}`,
-            color: imagePreview ? '#a78bfa' : 'var(--text-muted)',
-            cursor: 'pointer',
-            fontSize: '1.2rem',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.15s',
-          }}
-        >
-          📷
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
+          }}>
+          <CameraIcon size={18} color={imagePreview ? '#a78bfa' : 'rgba(255,255,255,0.4)'} />
         </button>
 
-        <input
-          className="form-control"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={imagePreview ? 'Describe what you see, or just press send…' : 'Ask me anything about your farm…'}
-          disabled={loading}
-          style={{ flex: 1, borderRadius: 999, paddingLeft: '1.25rem' }}
-          autoFocus
-        />
-        <button
-          className="btn"
-          type="submit"
-          disabled={loading || (!input.trim() && !imagePreview)}
-          style={{ borderRadius: 999, padding: '0 1.5rem', minWidth: 52, height: 44, background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: '#fff', boxShadow: '0 4px 15px rgba(124,58,237,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {loading ? <span className="spinner" /> : '▶'}
+        {/* Mic dictation button */}
+        {voiceSupported && (
+          <button type="button" onClick={startDictation} disabled={loading || dictating}
+            title="Tap to speak" style={{
+              flexShrink: 0, width: 44, height: 44, borderRadius: '50%',
+              background: 'rgba(22,163,74,0.12)',
+              border: '1px solid rgba(74,222,128,0.3)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
+            }}>
+            <MicIcon size={18} color="#4ade80" />
+          </button>
+        )}
+
+        <input className="form-control" value={input} onChange={(e) => setInput(e.target.value)}
+          placeholder={imagePreview ? 'Describe the photo…' : 'Ask anything about your farm…'}
+          disabled={loading} style={{ flex: 1, borderRadius: 999, paddingLeft: '1.25rem' }} autoFocus />
+
+        <button className="btn" type="submit" disabled={loading || (!input.trim() && !imagePreview)}
+          style={{ borderRadius: 999, padding: '0 1.25rem', minWidth: 48, height: 44, background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: '#fff', boxShadow: '0 4px 15px rgba(124,58,237,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {loading ? <span className="spinner" /> : <SendIcon size={18} color="#fff" />}
         </button>
       </form>
 
@@ -412,6 +477,10 @@ export default function AgentChatPage() {
         @keyframes agent-pulse {
           0%, 100% { box-shadow: 0 0 8px rgba(124,58,237,0.4); }
           50% { box-shadow: 0 0 20px rgba(124,58,237,0.8); }
+        }
+        @keyframes wave {
+          0%, 100% { height: 6px; }
+          50% { height: 28px; }
         }
       `}</style>
     </div>

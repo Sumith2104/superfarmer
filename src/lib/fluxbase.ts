@@ -27,20 +27,61 @@ async function fetchWithTimeout(url: string, opts: RequestInit, ms = TIMEOUT_SQL
 
 export type Row = Record<string, unknown>;
 
+// ── Fluxbase rate-limit cooldown ──────────────────────────
+// If ANY dbExecute gets a 429, stop ALL DB calls for 30s.
+// This prevents the thundering herd where N concurrent requests
+// each retry 3× creating 3N more requests.
+let dbCooldownUntil = 0;
+const DB_COOLDOWN_MS = 30_000;
+
+function isDbOnCooldown(): boolean { return Date.now() < dbCooldownUntil; }
+function setDbCooldown() {
+  dbCooldownUntil = Date.now() + DB_COOLDOWN_MS;
+  console.warn(`[Fluxbase] 429 — DB on cooldown for ${DB_COOLDOWN_MS / 1000}s. Returning empty results.`);
+}
+
+// ── Simple in-memory query cache ─────────────────────────
+const dbCache = new Map<string, { rows: Row[]; exp: number }>();
+const DB_CACHE_TTL = 15_000; // 15s cache for identical queries
+
 // ── SQL ───────────────────────────────────────────────────
 export async function dbExecute(query: string, params?: unknown[]): Promise<Row[]> {
+  // Return empty immediately if on cooldown
+  if (isDbOnCooldown()) return [];
+
+  // Cache key — skip cache for INSERT/UPDATE/DELETE
+  const isWrite = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(query);
+  const cacheKey = isWrite ? '' : `${query}|${JSON.stringify(params ?? [])}`;
+
+  if (cacheKey) {
+    const hit = dbCache.get(cacheKey);
+    if (hit && Date.now() < hit.exp) return hit.rows;
+  }
+
   const res = await fetchWithTimeout(`${FLUXBASE_URL}/api/execute-sql`, {
     method: 'POST',
     headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, projectId: PROJECT_ID, ...(params?.length ? { params } : {}) }),
   }, TIMEOUT_SQL);
+
+  if (res.status === 429) {
+    setDbCooldown();
+    return []; // return empty, don't throw — callers handle missing data gracefully
+  }
+
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Fluxbase SQL ${res.status}: ${text.slice(0, 200)}`);
   }
+
   const data = await res.json();
   if (data.success === false) throw new Error(data.error?.message ?? 'Query failed');
-  return (data?.result?.rows ?? []) as Row[];
+  const rows = (data?.result?.rows ?? []) as Row[];
+
+  // Cache read results
+  if (cacheKey) dbCache.set(cacheKey, { rows, exp: Date.now() + DB_CACHE_TTL });
+
+  return rows;
 }
 
 export async function dbLastInsertId(): Promise<number> {

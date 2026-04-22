@@ -255,6 +255,7 @@ function SatelliteMap({
   const mapInst = useRef<unknown>(null);
   const [drawnAcres, setDrawnAcres] = useState<number | null>(savedBoundary?.area_acres ?? null);
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [pendingLatlngs, setPendingLatlngs] = useState<[number, number][] | null>(null);
 
@@ -324,18 +325,9 @@ function SatelliteMap({
         setSaveMsg('');
       });
 
-      // Crop markers
-      if (result) {
-        result.crop_stats.forEach((crop, i) => {
-          const lat = center[0] + (i - result.crop_stats.length / 2) * 0.018;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (L as any).circleMarker([lat, center[1]], {
-            radius: 14, color: crop.color, fillColor: crop.color, fillOpacity: 0.75, weight: 2,
-          }).bindPopup(`<b>${crop.emoji} ${crop.name}</b><br>Yield: ${crop.yield_t_per_acre}t/acre<br>Water: ${crop.water}`).addTo(map);
-        });
-      }
 
       mapInst.current = map;
+
     }
 
     function loadScripts() {
@@ -363,6 +355,23 @@ function SatelliteMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function clearField() {
+    if (!confirm('Clear saved field boundary? This cannot be undone.')) return;
+    setClearing(true);
+    try {
+      const res = await fetch('/api/field-boundary', { method: 'DELETE' });
+      if (res.ok) {
+        setSaveMsg('🗑️ Field cleared from your profile.');
+        setDrawnAcres(null);
+        setPendingLatlngs(null);
+        setTimeout(() => window.location.reload(), 900);
+      } else {
+        setSaveMsg('❌ Failed to clear field.');
+      }
+    } catch { setSaveMsg('❌ Connection error.'); }
+    finally { setClearing(false); }
+  }
 
   async function saveField() {
     if (!pendingLatlngs || drawnAcres === null) return;
@@ -395,31 +404,57 @@ function SatelliteMap({
   return (
     <div style={{ position: 'relative' }}>
       <div ref={mapRef} style={{ width: '100%', height: 460, borderRadius: 12 }} />
-      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.4rem', maxWidth: 240 }}>
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.4rem', maxWidth: 230 }}>
+
+        {/* Header */}
         <div style={{ background: 'rgba(10,22,40,0.92)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#86efac', border: '1px solid rgba(74,222,128,0.25)' }}>
           🛰️ Satellite — Draw your field
         </div>
-        <div style={{ background: 'rgba(10,22,40,0.92)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)', lineHeight: 1.65 }}>
-          📐 Use the polygon or rectangle tool (left toolbar) to trace your field boundary.
-        </div>
+
+        {/* Instructions */}
+        {drawnAcres === null && (
+          <div style={{ background: 'rgba(10,22,40,0.92)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)', lineHeight: 1.65 }}>
+            📐 Use the polygon tool (left toolbar) to trace your field.
+          </div>
+        )}
+
+        {/* Area badge */}
         {drawnAcres !== null && (
           <div style={{ background: 'rgba(74,222,128,0.15)', borderRadius: 10, padding: '0.65rem 0.75rem', fontSize: '0.82rem', color: '#4ade80', border: '1px solid rgba(74,222,128,0.35)', fontWeight: 700 }}>
             📏 {drawnAcres} acres<br />
             <span style={{ fontSize: '0.68rem', fontWeight: 400, color: 'rgba(255,255,255,0.45)' }}>{(drawnAcres * 4046.9).toFixed(0)} m²</span>
           </div>
         )}
+
+        {/* Save new drawing */}
         {pendingLatlngs && (
-          <button onClick={saveField} disabled={saving} style={{ padding: '0.55rem 0.9rem', borderRadius: 10, background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-            {saving ? '⏳ Saving...' : '💾 Save Field to Profile'}
+          <button onClick={saveField} disabled={saving} style={{ padding: '0.55rem 0.9rem', borderRadius: 10, background: 'linear-gradient(135deg,#16a34a,#0ea5e9)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? '⏳ Saving...' : '💾 Save Field'}
           </button>
         )}
+
+        {/* Saved boundary — with clear button */}
         {savedBoundary && !pendingLatlngs && (
-          <div style={{ background: 'rgba(14,165,233,0.15)', borderRadius: 10, padding: '0.55rem 0.75rem', fontSize: '0.75rem', color: '#38bdf8', border: '1px solid rgba(14,165,233,0.3)' }}>
-            ✅ Saved field loaded<br />{savedBoundary.area_acres} acres — used in 2D & 3D
+          <div style={{ background: 'rgba(14,165,233,0.1)', borderRadius: 10, padding: '0.6rem 0.75rem', border: '1px solid rgba(14,165,233,0.25)' }}>
+            <div style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 700, marginBottom: '0.2rem' }}>
+              ✅ {savedBoundary.area_acres} acres saved
+            </div>
+            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.5rem' }}>
+              📦 Stored in farmer profile
+            </div>
+            <button
+              onClick={clearField}
+              disabled={clearing}
+              style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: '0.72rem', fontWeight: 600, cursor: clearing ? 'wait' : 'pointer' }}
+            >
+              {clearing ? '⏳ Clearing...' : '🗑️ Clear Field'}
+            </button>
           </div>
         )}
+
+        {/* Status message */}
         {saveMsg && (
-          <div style={{ background: 'rgba(10,22,40,0.92)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: saveMsg.startsWith('✅') ? '#4ade80' : '#f87171', border: '1px solid rgba(255,255,255,0.1)', lineHeight: 1.55 }}>
+          <div style={{ background: 'rgba(10,22,40,0.92)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: saveMsg.startsWith('✅') || saveMsg.startsWith('🗑️') ? '#4ade80' : '#f87171', border: '1px solid rgba(255,255,255,0.1)', lineHeight: 1.55 }}>
             {saveMsg}
           </div>
         )}

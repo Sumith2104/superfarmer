@@ -16,9 +16,38 @@ export function withTimeout<T>(promise: Promise<T>, ms = 120_000): Promise<T> {
   return Promise.race([promise, timeout]);
 }
 
+// ── Groq rate-limit cooldown ─────────────────────────────
+// When Groq returns 429, skip it for GROQ_COOLDOWN_MS to avoid
+// hammering the API and wasting quota on failed calls.
+let groqCooldownUntil = 0;
+const GROQ_COOLDOWN_MS = 60_000; // 60 seconds
+
+function isGroqOnCooldown(): boolean {
+  return Date.now() < groqCooldownUntil;
+}
+
+function setGroqCooldown(retryAfterMs = GROQ_COOLDOWN_MS) {
+  groqCooldownUntil = Date.now() + retryAfterMs;
+  console.warn(`[Hybrid AI] Groq on cooldown for ${Math.ceil(retryAfterMs / 1000)}s — routing all requests to Gemini.`);
+}
+
+/** Parse retry-after from Groq 429 body if available */
+function parseRetryAfter(body: string): number {
+  try {
+    const match = body.match(/try again in (\d+(?:\.\d+)?)\s*(ms|s|second)/i);
+    if (match) {
+      const val = parseFloat(match[1]);
+      const unit = match[2].toLowerCase();
+      const ms = unit === 'ms' ? val : val * 1000;
+      return Math.max(ms + 2000, GROQ_COOLDOWN_MS); // at least 60s
+    }
+  } catch { /* ignore */ }
+  return GROQ_COOLDOWN_MS;
+}
+
 /**
- * HybridModel uses Groq Cloud (Main Chick) for text processing (insanely fast)
- * and falls back to Gemini API (Side Chick) if Groq fails or if dealing with Images.
+ * HybridModel — Groq Cloud primary, Gemini fallback.
+ * Smart cooldown: after a 429, skips Groq for 60 seconds.
  */
 class HybridModel {
   constructor(
@@ -29,113 +58,114 @@ class HybridModel {
     private groqModelName: string
   ) {}
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async generateContent(contents: any) {
-    let promptText: string = '';
+    let promptText = '';
     let hasImages = false;
 
-    // Extract text and see if images are present
     if (Array.isArray(contents)) {
       for (const item of contents) {
         if (typeof item === 'string') promptText += item + '\n';
         else if (item.text) promptText += item.text + '\n';
-        
-        if (item.inlineData && item.inlineData.data) {
-          hasImages = true;
-        }
+        if (item.inlineData?.data) hasImages = true;
       }
     } else if (typeof contents === 'string') {
       promptText = contents;
     } else if (contents?.parts) {
-       promptText = JSON.stringify(contents); // rudimentary fallback
+      promptText = JSON.stringify(contents);
     } else {
-       promptText = String(contents);
+      promptText = String(contents);
     }
 
-    // 1. VISION CHECK: Groq doesn't natively do Gemini-styled vision yet.
-    // If it is a vision task, instantly trigger the fallback to Gemini.
+    // Vision → always Gemini
     if (hasImages || this.isVision) {
-      console.log(`[Hybrid AI] Image detected. Skipping Groq, routing directly to Gemini Vision...`);
+      console.log(`[Hybrid AI] Vision task — routing directly to Gemini.`);
       return this.fallbackToGemini(contents);
     }
 
-    // 2. PRIMARY CLOUD LLM: Groq API
+    // Cooldown active → skip Groq, go straight to Gemini
+    if (isGroqOnCooldown()) {
+      const remaining = Math.ceil((groqCooldownUntil - Date.now()) / 1000);
+      console.log(`[Hybrid AI] Groq cooldown active (${remaining}s left) — using Gemini.`);
+      return this.fallbackToGemini(contents);
+    }
+
+    // Try Groq
     try {
-      console.log(`[Hybrid AI] Attempting primary request with Groq Cloud (${this.groqModelName})...`);
-      
+      console.log(`[Hybrid AI] Attempting Groq Cloud (${this.groqModelName})...`);
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${groqApiKey}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: this.groqModelName,
           messages: [
             ...(this.systemInstruction ? [{ role: 'system', content: this.systemInstruction }] : []),
-            { role: 'user', content: promptText + (this.jsonMode && !/json/i.test(this.systemInstruction + promptText) ? '\n\nPlease output valid JSON format.' : '') }
+            {
+              role: 'user',
+              content:
+                promptText +
+                (this.jsonMode && !/json/i.test(this.systemInstruction + promptText)
+                  ? '\n\nPlease output valid JSON format.'
+                  : ''),
+            },
           ],
-          response_format: this.jsonMode ? { type: "json_object" } : undefined
-        })
+          response_format: this.jsonMode ? { type: 'json_object' } : undefined,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        if (response.status === 429) {
+          const cooldownMs = parseRetryAfter(errorText);
+          setGroqCooldown(cooldownMs);
+        }
         throw new Error(`Groq HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log(`[Hybrid AI] Groq generated in ${data.usage?.total_time || '<1'} seconds.`);
-      
-      return {
-        response: {
-          text: () => data.choices[0].message.content
-        }
-      };
-    } catch (groqErr: any) {
-      console.warn(`[Hybrid AI] Groq Cloud failed (${groqErr.message}). Falling back to Gemini...`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await response.json();
+      console.log(`[Hybrid AI] Groq generated in ${data.usage?.total_time ?? '<1'} seconds.`);
+      return { response: { text: () => data.choices[0].message.content } };
+    } catch (groqErr: unknown) {
+      const msg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+      if (!msg.includes('429')) {
+        // Non-rate-limit error — log but don't set cooldown
+        console.warn(`[Hybrid AI] Groq error (${msg}). Falling back to Gemini...`);
+      }
       return this.fallbackToGemini(contents);
     }
   }
 
-  // 3. FALLBACK: Gemini API
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async fallbackToGemini(contents: any) {
     const generationConfig: GenerationConfig = {
       topP: 0.8,
       responseMimeType: this.jsonMode ? 'application/json' : 'text/plain',
     };
-    
     const model = genai.getGenerativeModel({
       model: this.geminiModelName,
       systemInstruction: this.systemInstruction,
-      generationConfig
+      generationConfig,
     });
-    
     return await model.generateContent(contents);
   }
 }
 
-/**
- * Returns a Hybrid model pre-configured for JSON output.
- * We map 'llama3' to Groq's official 8B Llama 3 model ID.
- */
 export function getJsonModel(
   systemInstruction: string,
   options: { temperature?: number; maxTokens?: number; modelName?: string } = {}
 ) {
-  const { modelName = 'gemini-3.1-flash-lite-preview' } = options;
+  const { modelName = 'gemini-2.0-flash-lite' } = options;
   return new HybridModel(systemInstruction, false, true, modelName, 'llama-3.1-8b-instant');
 }
 
-/**
- * Vision model - immediately triggered to Gemini.
- */
 export function getVisionModel(systemInstruction: string) {
-  return new HybridModel(systemInstruction, true, true, 'gemini-3.1-flash-lite-preview', 'llama-3.1-8b-instant');
+  return new HybridModel(systemInstruction, true, true, 'gemini-2.0-flash-lite', 'llama-3.1-8b-instant');
 }
 
-/**
- * Standard text model interface.
- */
-export function getGeminiModel(modelName = 'gemini-3.1-flash-lite-preview') {
+export function getGeminiModel(modelName = 'gemini-2.0-flash-lite') {
   return new HybridModel('', false, false, modelName, 'llama-3.1-8b-instant');
 }

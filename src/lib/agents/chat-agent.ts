@@ -5,6 +5,7 @@
 
 import { dbExecute } from '@/lib/fluxbase';
 import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import { FARM_TOOLS } from './tools/registry';
 import { executeTool } from './tools/executor';
 import type { AgentContext, AgentResult } from './types';
@@ -159,6 +160,15 @@ export async function runChatAgent(
         ].filter(Boolean).join(' | ');
 
         void saveMemory(farmerId, 'agent-chat', memorySummary);
+        // Log to top-level agent_memory table
+        void logAgentAction({
+          farmerId,
+          agent: 'agent-chat',
+          actionType: 'query',
+          input: question.slice(0, 400),
+          output: finalAnswer.slice(0, 800),
+          toolsUsed,
+        });
         void dbExecute(
           'INSERT INTO session_logs (farmer_id, interaction_log) VALUES (?, ?)',
           [farmerId, JSON.stringify({
