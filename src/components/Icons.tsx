@@ -9,22 +9,26 @@ interface IconProps {
   style?: React.CSSProperties;
 }
 
-const base = (d: string, opts?: { viewBox?: string; strokeWidth?: number }) =>
-  ({ size = 24, color = 'currentColor', className, style }: IconProps) => (
-    <svg
-      width={size} height={size}
-      viewBox={opts?.viewBox ?? '0 0 24 24'}
-      fill="none"
-      stroke={color}
-      strokeWidth={opts?.strokeWidth ?? 2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      style={style}
-    >
-      <path d={d} />
-    </svg>
-  );
+function base(d: string, opts?: { viewBox?: string; strokeWidth?: number }) {
+  function Icon({ size = 24, color = 'currentColor', className, style }: IconProps) {
+    return (
+      <svg
+        width={size} height={size}
+        viewBox={opts?.viewBox ?? '0 0 24 24'}
+        fill="none"
+        stroke={color}
+        strokeWidth={opts?.strokeWidth ?? 2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        style={style}
+      >
+        <path d={d} />
+      </svg>
+    );
+  }
+  return Icon;
+}
 
 // Navigation
 export const HomeIcon = base('M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10');

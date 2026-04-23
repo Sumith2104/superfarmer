@@ -44,7 +44,8 @@ export default function DiseasePage() {
 
   // Pick random tip only on client to avoid SSR hydration mismatch
   useEffect(() => {
-    setTipIndex(Math.floor(Math.random() * IDLE_TIPS.length));
+    const t = setTimeout(() => setTipIndex(Math.floor(Math.random() * IDLE_TIPS.length)), 0);
+    return () => clearTimeout(t);
   }, []);
 
   function handleImage(e: React.ChangeEvent<HTMLInputElement>) {

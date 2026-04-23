@@ -30,7 +30,7 @@ export async function runDashboardAgent(
     );
     const latestRisk = riskRows[0] as { risk_level: string; suggested_action: string } | undefined;
     const nutrientStatus: DashboardData['nutrient_status'] = {
-      level: (latestRisk?.risk_level as any) || 'Safe',
+      level: (latestRisk?.risk_level as DashboardData['nutrient_status']['level']) || 'Safe',
       message: latestRisk?.suggested_action || 'No nutrient risks detected recently.'
     };
 

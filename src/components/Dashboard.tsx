@@ -16,8 +16,8 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(await res.text());
         const json = await res.json();
         setData(json);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load dashboard.');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard.');
       } finally {
         setLoading(false);
       }

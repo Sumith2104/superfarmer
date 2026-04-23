@@ -20,7 +20,8 @@ export default function VoiceMicButton({ onResult, lang = 'en-IN', size = 42 }: 
   const srRef = useRef<any>(null);
 
   useEffect(() => {
-    setSupported(isSpeechSupported());
+    const t = setTimeout(() => setSupported(isSpeechSupported()), 0);
+    return () => clearTimeout(t);
   }, []);
 
   // Don't render anything until we know speech is supported (client-only)

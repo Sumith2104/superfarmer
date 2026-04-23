@@ -33,7 +33,10 @@ export default function VoiceAssistant({ lang = 'en' }: { lang?: string }) {
   const router = useRouter();
   const langCode = getLangCode(lang);
 
-  useEffect(() => { setSupported(isSpeechSupported()); }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setSupported(isSpeechSupported()), 0);
+    return () => clearTimeout(t);
+  }, []);
 
   const stopVoice = useCallback(() => {
     stopListening(srRef.current);
