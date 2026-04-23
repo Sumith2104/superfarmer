@@ -33,13 +33,12 @@ export function isTTSSupported(): boolean {
 /** Speak text aloud using the device's TTS engine */
 export function speak(text: string, lang = 'en-IN', rate = 0.95): void {
   if (!isTTSSupported()) return;
-  window.speechSynthesis.cancel(); // stop any current speech
+  window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(stripMarkdown(text));
   utterance.lang = lang;
   utterance.rate = rate;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
-  // Pick a matching voice if available
   const voices = window.speechSynthesis.getVoices();
   const match = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
   if (match) utterance.voice = match;
@@ -56,30 +55,33 @@ export function isSpeaking(): boolean {
   return isTTSSupported() && window.speechSynthesis.speaking;
 }
 
-type SpeechRecognitionInstance = InstanceType<typeof window.SpeechRecognition>;
+// SpeechRecognition is not in TypeScript's DOM lib — use `any` to avoid build errors
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SR = any;
 
 /** Start voice recognition. Returns the recognition instance so caller can stop it. */
 export function startListening(
   onResult: (text: string) => void,
   onEnd?: () => void,
   lang = 'en-IN'
-): SpeechRecognitionInstance | null {
+): SR | null {
   if (typeof window === 'undefined') return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SR) return null;
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
 
-  const sr: SpeechRecognitionInstance = new SR();
+  const sr: SR = new SpeechRecognition();
   sr.lang = lang;
   sr.continuous = false;
   sr.interimResults = true;
   sr.maxAlternatives = 1;
 
-  sr.onresult = (e: SpeechRecognitionEvent) => {
-    const transcript = Array.from(e.results)
-      .map(r => r[0].transcript)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sr.onresult = (e: any) => {
+    const transcript = Array.from(e.results as ArrayLike<SpeechRecognitionResult>)
+      .map((r: SpeechRecognitionResult) => r[0].transcript)
       .join('');
-    if (e.results[e.results.length - 1].isFinal) {
+    if ((e.results as SpeechRecognitionResultList)[e.results.length - 1].isFinal) {
       onResult(transcript);
     }
   };
@@ -92,7 +94,7 @@ export function startListening(
 }
 
 /** Stop a running speech recognition instance */
-export function stopListening(sr: SpeechRecognitionInstance | null): void {
+export function stopListening(sr: SR | null): void {
   try { sr?.stop(); } catch { /* ignore */ }
 }
 
