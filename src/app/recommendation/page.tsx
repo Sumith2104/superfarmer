@@ -104,7 +104,7 @@ export default function RecommendationPage() {
         <p>Answer a few simple questions about your farm. Our AI Agronomist will suggest the best crops for you.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: result ? '380px 1fr' : '560px', gap: '2rem', justifyContent: 'center' }}>
+      <div className="form-result-grid">
         {/* FORM */}
         <div className="card fade-in" style={{ alignSelf: 'start' }}>
           {error && <div className="alert alert-error">{error}</div>}

@@ -74,7 +74,7 @@ export default function PlanPage() {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+            <div className="two-col">
               {[
                 { icon: '🌱', label: 'Sowing Schedule', value: plan.sowing_schedule },
                 { icon: '💧', label: 'Irrigation Plan', value: plan.irrigation_plan },
@@ -93,7 +93,7 @@ export default function PlanPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
             <Link href="/nutrient-risk" className="btn btn-primary">Proceed to Nutrient Monitoring →</Link>
             <button className="btn btn-secondary" onClick={() => setPlan(null)}>Generate New Plan</button>
           </div>

@@ -82,14 +82,21 @@ Return JSON:
   // Persist to DB
   if (farmerId) {
     trace.push('Step 3: Persisting plan to database...');
+    // Guard all fields — AI may return partial JSON
+    plan.sowing_schedule     = plan.sowing_schedule     || 'Sow at start of season.';
+    plan.irrigation_plan     = plan.irrigation_plan     || 'Irrigate every 7–10 days.';
+    plan.fertilizer_schedule = plan.fertilizer_schedule || 'Apply NPK as per crop requirement.';
+    plan.pest_alerts         = plan.pest_alerts         || 'Scout weekly for pests and diseases.';
+    plan.harvest_timeline    = plan.harvest_timeline    || 'Harvest at physiological maturity.';
+
     await dbExecute(
       'INSERT INTO crop_plans (farmer_id, crop_name, sowing_schedule, irrigation_plan, fertilizer_schedule, pest_alerts, harvest_timeline) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [farmerId, cropName, plan.sowing_schedule, plan.irrigation_plan, plan.fertilizer_schedule, plan.pest_alerts, plan.harvest_timeline]
     );
     const planId = await dbLastInsertId();
     plan.plan_id = planId;
-    
-    void saveMemory(farmerId, 'plan', `Generated new ${plan.status} plan for ${cropName}. Harvest in ~${plan.harvest_timeline.slice(0, 30)}...`);
+
+    void saveMemory(farmerId, 'plan', `Generated new ${plan.status} plan for ${cropName}. Harvest in ~${(plan.harvest_timeline ?? '').slice(0, 30)}...`);
     trace.push(`Step 3 ✓: Plan #${planId} saved.`);
   }
 

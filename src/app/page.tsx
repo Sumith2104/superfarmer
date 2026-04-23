@@ -149,7 +149,7 @@ export default async function Home() {
 
       {/* ── Stats row (logged out) ── */}
       {!loggedIn && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '3rem', textAlign: 'center' }}>
+        <div className="card-grid" style={{ marginTop: '3rem', textAlign: 'center' }}>
           {[
             { Icon: ZapIcon,  val: '15+', label: 'AI Agents', color: '#a78bfa' },
             { Icon: BrainIcon, val: '∞',   label: 'Memory',    color: '#34d399' },

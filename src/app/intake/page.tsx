@@ -33,7 +33,7 @@ export default function IntakePage() {
             <label>Your Name</label>
             <input className="form-control" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g. Ramesh Kumar" required />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="input-row">
             <div className="form-group">
               <label>Land Size (acres)</label>
               <input className="form-control" type="number" step="0.1" value={form.land_size} onChange={(e) => update('land_size', e.target.value)} placeholder="e.g. 5.5" required />

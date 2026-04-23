@@ -213,53 +213,41 @@ export default function FileManagerPage() {
             <p>{files.length === 0 ? `No files in ${bucket} yet — upload something above!` : 'No files match your search.'}</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2rem 1fr 7rem 7rem auto', gap: '0.75rem', padding: '0.4rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', borderBottom: '1px solid var(--glass-border)', marginBottom: '0.25rem' }}>
-              <span/>
-              <span>FILE NAME</span>
-              <span>SIZE</span>
-              <span>TYPE</span>
-              <span>ACTIONS</span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {filtered.map((file, i) => {
               const color = fileColor(file.name);
               return (
-                <div key={file.id || i} style={{ display: 'grid', gridTemplateColumns: '2rem 1fr 7rem 7rem auto', gap: '0.75rem', alignItems: 'center', padding: '0.6rem 0.75rem', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid transparent', transition: 'all 0.15s', cursor: 'default' }}
+                <div key={file.id || i}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 0.85rem', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid transparent', transition: 'all 0.15s' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
                 >
                   {/* Icon */}
-                  <div style={{ fontSize: '1.3rem', textAlign: 'center' }}>{fileIcon(file.name, file.type)}</div>
-                  {/* Name */}
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 380 }}>{file.name}</div>
-                    {file.id && <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: '0.1rem' }}>{file.id.slice(0, 20)}…</div>}
+                  <div style={{ fontSize: '1.4rem', flexShrink: 0 }}>{fileIcon(file.name, file.type)}</div>
+
+                  {/* Name + meta */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
+                    <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.15rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.45rem', borderRadius: 999, background: color + '22', color, border: `1px solid ${color}44`, fontWeight: 600 }}>
+                        {file.name.split('.').pop()?.toUpperCase() || 'FILE'}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{formatBytes(file.size || 0)}</span>
+                    </div>
                   </div>
-                  {/* Size */}
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatBytes(file.size || 0)}</div>
-                  {/* Type badge */}
-                  <div>
-                    <span style={{ fontSize: '0.68rem', padding: '0.15rem 0.55rem', borderRadius: 999, background: color + '22', color, border: `1px solid ${color}44`, fontWeight: 600 }}>
-                      {file.name.split('.').pop()?.toUpperCase() || 'FILE'}
-                    </span>
-                  </div>
+
                   {/* Actions */}
-                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
                     <button
                       onClick={() => downloadFile(file)}
                       title="Download"
-                      style={{ padding: '0.3rem 0.65rem', borderRadius: 8, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', color: '#38bdf8', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, transition: 'all 0.15s' }}
-                    >
-                      ⬇️ Download
-                    </button>
+                      style={{ padding: '0.35rem 0.6rem', borderRadius: 8, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', color: '#38bdf8', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+                    >⬇️</button>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(file.id); setSuccess(`Copied file ID: ${file.id}`); }}
+                      onClick={() => { navigator.clipboard.writeText(file.id); setSuccess(`Copied: ${file.id}`); }}
                       title="Copy ID"
-                      style={{ padding: '0.3rem 0.5rem', borderRadius: 8, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a78bfa', cursor: 'pointer', fontSize: '0.75rem' }}
-                    >
-                      📋
-                    </button>
+                      style={{ padding: '0.35rem 0.5rem', borderRadius: 8, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a78bfa', cursor: 'pointer', fontSize: '0.72rem' }}
+                    >📋</button>
                   </div>
                 </div>
               );

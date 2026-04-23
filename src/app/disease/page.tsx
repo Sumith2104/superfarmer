@@ -136,7 +136,7 @@ export default function DiseasePage() {
         <p>Describe your crop&apos;s symptoms or upload an image — our AI Vision Agent will identify the pathology.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
+      <div className="two-col">
         {/* Form */}
         <div className="card fade-in">
           {error && <div className="alert alert-error">{error}</div>}
