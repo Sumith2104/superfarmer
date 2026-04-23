@@ -1,89 +1,49 @@
 'use client';
-// src/components/BottomNav.tsx — Mobile-only bottom navigation
+// src/components/BottomNav.tsx — Mobile bottom nav + full-page "More" drawer
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-// Inline SVG icons — guaranteed to render correctly at small sizes
-function HomeIco({ active }: { active: boolean }) {
+// ── Inline SVGs ────────────────────────────────────────────────
+function Ico({ d, active, size = 22 }: { d: string; active?: boolean; size?: number }) {
   const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-      <polyline points="9,22 9,12 15,12 15,22" />
-    </svg>
-  );
-}
-function CropIco({ active }: { active: boolean }) {
-  const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22V12" />
-      <path d="M5.2 13C4.4 12 4 10.9 4 9.5a8 8 0 0116 0c0 1.4-.4 2.5-1.2 3.5L12 22z" />
-    </svg>
-  );
-}
-function ChatIco({ active }: { active: boolean }) {
-  const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-    </svg>
-  );
-}
-function MapIco({ active }: { active: boolean }) {
-  const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="1,6 1,22 8,18 16,22 23,18 23,2 16,6 8,2" />
-      <line x1="8" y1="2" x2="8" y2="18" />
-      <line x1="16" y1="6" x2="16" y2="22" />
-    </svg>
-  );
-}
-function DiseaseIco({ active }: { active: boolean }) {
-  const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      <line x1="11" y1="8" x2="11" y2="11" />
-      <line x1="11" y1="14" x2="11.01" y2="14" />
-    </svg>
-  );
-}
-function ProfileIco({ active }: { active: boolean }) {
-  const c = active ? '#4ade80' : 'rgba(255,255,255,0.45)';
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-function LogoutIco() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-      <polyline points="16,17 21,12 16,7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
     </svg>
   );
 }
 
-const NAV_ITEMS = [
-  { href: '/',                label: 'Home',    Ico: HomeIco },
-  { href: '/agent-chat',      label: 'AI',      Ico: ChatIco },
-  { href: '/spatial-planner', label: 'Map',     Ico: MapIco },
-  { href: '/disease',         label: 'Disease', Ico: DiseaseIco },
-  { href: '/profile',         label: 'Profile', Ico: ProfileIco },
+// ── Primary nav (always visible) ───────────────────────────────
+const PRIMARY = [
+  { href: '/',            label: 'Home',    d: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
+  { href: '/agent-chat',  label: 'AI Chat', d: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
+  { href: '/disease',     label: 'Disease', d: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 8v4 M12 16h.01' },
+  { href: '/spatial-planner', label: 'Map', d: 'M3 6l9-4 9 4v12l-9 4-9-4V6z M12 2v20 M3 6l9 4 9-4' },
+];
+
+// ── All pages in the "More" drawer ────────────────────────────
+const MORE_PAGES = [
+  { href: '/profile',         label: 'My Profile',       emoji: '👤', desc: 'View & edit your farm info' },
+  { href: '/recommendation',  label: 'Crop Advice',       emoji: '🌱', desc: 'AI crop recommendations' },
+  { href: '/plan',            label: 'Crop Plan',         emoji: '📅', desc: 'Season management plan' },
+  { href: '/disease',         label: 'Disease Diagnosis', emoji: '🔬', desc: 'AI pest & disease scanner' },
+  { href: '/spatial-planner', label: 'Spatial Map',       emoji: '🗺️', desc: 'Draw & measure your field' },
+  { href: '/agent-chat',      label: 'AI Chat',           emoji: '💬', desc: 'Chat with farm AI agents' },
+  { href: '/agents',          label: 'Agent Hub',         emoji: '🤖', desc: 'Run autonomous AI agents' },
+  { href: '/report',          label: 'Farm Report',       emoji: '📊', desc: 'Full AI farm analysis' },
+  { href: '/memory',          label: 'AI Memory',         emoji: '🧠', desc: 'Agent knowledge base' },
+  { href: '/files',           label: 'File Manager',      emoji: '🗄️', desc: 'Upload & manage farm files' },
+  { href: '/intake',          label: 'Farm Setup',        emoji: '🏡', desc: 'Update farm basics' },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
 
   useEffect(() => {
@@ -93,9 +53,13 @@ export default function BottomNav() {
       .catch(() => setLoggedIn(false));
   }, [pathname]);
 
+  // Close drawer on route change
+  useEffect(() => { setShowMore(false); }, [pathname]);
+
   async function handleLogout() {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
     setLoggedIn(false);
+    setShowMore(false);
     setShowLogout(false);
     router.push('/');
     router.refresh();
@@ -105,10 +69,110 @@ export default function BottomNav() {
 
   return (
     <>
-      {/* ── Logout bottom sheet ── */}
+      {/* ── More Drawer (full-height slide-up) ── */}
+      {showMore && (
+        <div
+          onClick={() => setShowMore(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0,
+              maxHeight: '85vh',
+              background: 'linear-gradient(180deg, #0d1f12 0%, #0a1a0e 100%)',
+              border: '1px solid rgba(74,222,128,0.18)',
+              borderRadius: '24px 24px 0 0',
+              display: 'flex', flexDirection: 'column',
+              animation: 'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)',
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
+              <div style={{
+                width: 40, height: 4, borderRadius: 999,
+                background: 'rgba(255,255,255,0.18)', margin: '0 auto 16px',
+              }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'rgba(74,222,128,0.7)', letterSpacing: '0.12em' }}>
+                  ALL PAGES
+                </span>
+                <button
+                  onClick={() => setShowMore(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8, padding: '4px 10px', color: 'rgba(255,255,255,0.55)',
+                    cursor: 'pointer', fontSize: '0.78rem',
+                  }}
+                >✕ Close</button>
+              </div>
+            </div>
+
+            {/* Scrollable page list */}
+            <div style={{ overflowY: 'auto', padding: '0 14px', paddingBottom: 'calc(var(--bottom-nav-h) + 8px)', flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                {MORE_PAGES.map(({ href, label, emoji, desc }) => {
+                  const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        padding: '0.85rem 0.9rem',
+                        background: active ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${active ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                        borderRadius: 14, textDecoration: 'none', transition: 'all 0.15s',
+                      }}
+                      onTouchStart={e => {
+                        (e.currentTarget as HTMLElement).style.background = active ? 'rgba(74,222,128,0.18)' : 'rgba(255,255,255,0.07)';
+                      }}
+                      onTouchEnd={e => {
+                        (e.currentTarget as HTMLElement).style.background = active ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.03)';
+                      }}
+                    >
+                      <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{emoji}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: active ? '#4ade80' : '#e5e7eb', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {label}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.38)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {desc}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              {/* Logout row at bottom of drawer */}
+              <button
+                onClick={() => { setShowMore(false); setShowLogout(true); }}
+                style={{
+                  width: '100%', marginTop: '0.75rem', padding: '0.85rem 1rem',
+                  display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)',
+                  borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: '1.4rem' }}>🚪</span>
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f87171' }}>Logout</div>
+                  <div style={{ fontSize: '0.65rem', color: 'rgba(239,68,68,0.5)' }}>Sign out of your account</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Logout confirm sheet ── */}
       {showLogout && (
         <div onClick={() => setShowLogout(false)} style={{
-          position: 'fixed', inset: 0, zIndex: 300,
+          position: 'fixed', inset: 0, zIndex: 500,
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
         }}>
           <div onClick={e => e.stopPropagation()} style={{
@@ -135,7 +199,7 @@ export default function BottomNav() {
 
       {/* ── Bottom nav bar ── */}
       <nav className="bottom-nav">
-        {NAV_ITEMS.map(({ href, label, Ico }) => {
+        {PRIMARY.map(({ href, label, d }) => {
           const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
           return (
             <Link
@@ -163,25 +227,57 @@ export default function BottomNav() {
                 transition: 'transform 0.15s',
                 filter: active ? 'drop-shadow(0 0 5px rgba(74,222,128,0.5))' : 'none',
               }}>
-                <Ico active={active} />
+                <Ico d={d} active={active} />
               </span>
-              <span style={{ color: active ? '#4ade80' : 'rgba(255,255,255,0.4)' }}>{label}</span>
+              <span>{label}</span>
             </Link>
           );
         })}
 
-        {/* Logout */}
-        <button onClick={() => setShowLogout(true)} style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          gap: 3, paddingTop: 6, background: 'none', border: 'none',
-          color: 'rgba(239,68,68,0.65)', fontSize: '0.58rem', fontWeight: 500,
-          letterSpacing: '0.03em', cursor: 'pointer',
-        }}>
-          <LogoutIco />
-          <span>Logout</span>
+        {/* ── More / Burger button ── */}
+        <button
+          onClick={() => { setShowMore(true); if ('vibrate' in navigator) navigator.vibrate(8); }}
+          style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 3, paddingTop: 6, background: 'none', border: 'none',
+            color: showMore ? '#4ade80' : 'rgba(255,255,255,0.4)',
+            fontSize: '0.58rem', fontWeight: showMore ? 700 : 500,
+            letterSpacing: '0.03em', cursor: 'pointer', position: 'relative',
+          }}
+        >
+          {showMore && (
+            <span style={{
+              position: 'absolute', top: 0, left: '18%', right: '18%',
+              height: 2, borderRadius: '0 0 4px 4px',
+              background: 'linear-gradient(90deg,#4ade80,#16a34a)',
+            }} />
+          )}
+          <span style={{
+            transform: showMore ? 'scale(1.12)' : 'scale(1)',
+            transition: 'transform 0.15s',
+            filter: showMore ? 'drop-shadow(0 0 5px rgba(74,222,128,0.5))' : 'none',
+          }}>
+            {/* Hamburger / X icon */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+              stroke={showMore ? '#4ade80' : 'rgba(255,255,255,0.45)'}
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {showMore
+                ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
+                : <><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></>
+              }
+            </svg>
+          </span>
+          <span>More</span>
         </button>
       </nav>
+
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+      `}</style>
     </>
   );
 }

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       });
     } catch (e) { /* ignore email failures on login */ }
 
-    return NextResponse.json({ success: true, userId: result.data!.userId });
+    return NextResponse.json({ success: true, userId: result.data!.userId, farmerId: farmerRows.length ? farmerRows[0].farmer_id : null });
   } catch (err) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

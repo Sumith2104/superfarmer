@@ -87,7 +87,14 @@ export function startListening(
   };
 
   sr.onend = () => { onEnd?.(); };
-  sr.onerror = () => { onEnd?.(); };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sr.onerror = (e: any) => { 
+    console.error('Speech recognition error:', e.error, e.message);
+    if (e.error === 'not-allowed') alert('Microphone permission blocked. Please allow mic access in your browser settings.');
+    else if (e.error === 'network') alert('Network error. Speech recognition requires an internet connection.');
+    else if (e.error !== 'no-speech') alert('Mic error: ' + e.error);
+    onEnd?.(); 
+  };
 
   sr.start();
   return sr;

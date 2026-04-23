@@ -21,7 +21,8 @@ export default function LoginPage() {
     const data = await res.json();
     setLoading(false);
     if (data.success) {
-      router.push(data.farmerId ? '/recommendation' : '/intake');
+      // Returning user (has profile) → dashboard, new user → intake setup
+      router.push(data.farmerId ? '/' : '/intake');
       router.refresh();
     } else setError(data.error || 'Login failed');
   }
