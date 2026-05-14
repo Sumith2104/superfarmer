@@ -3,11 +3,20 @@
 
 import { getJsonModel, withTimeout } from '@/lib/gemini';
 import { dbExecute } from '@/lib/fluxbase';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import type { AgentContext, AgentResult } from './types';
+
+export interface CropPhase {
+  phase: string;
+  duration: string;
+  status: string;
+  outcome_goal: string;
+  action_items: string[];
+}
 
 export interface ReportData {
   report: string;
+  crop_lifecycle: CropPhase[];
   sections: {
     farmer_summary: string;
     crop_recommendation: string;
@@ -20,9 +29,8 @@ export interface ReportData {
 }
 
 const SYSTEM_INSTRUCTION = `You are the SuperFarmer AI Report Agent.
-Synthesize data from multiple farm monitoring agents into a comprehensive, professional advisory report.
-Be empathetic, use simple language a farmer can understand, and prioritize actionable advice.
-Format the report clearly with sections. Respond with valid JSON.`;
+Synthesize data from multiple farm monitoring agents into a comprehensive, high-credibility advisory report.
+Respond ONLY with valid JSON. Include a 5-phase Crop Lifecycle (Preparation, Sowing, Growth, Protection, Harvest).`;
 
 export async function runReportAgent(
   ctx: AgentContext
@@ -31,11 +39,10 @@ export async function runReportAgent(
   const { farmerId, farmerProfile } = ctx;
 
   if (!farmerId) {
-    return { success: false, error: 'Farmer profile required to generate report', trace };
+    return { success: false, error: 'Farmer profile required', trace };
   }
 
-  // ── Step 1: Parallel fetch all agent data from DB ──
-  trace.push('Step 1: Fetching all agent data from database in parallel...');
+  trace.push('Step 1: Fetching agent data...');
   const [planRows, recRows, riskRows, reportRows, sessionRows] = await Promise.all([
     dbExecute('SELECT * FROM crop_plans WHERE farmer_id = ? ORDER BY created_at DESC LIMIT 1', [farmerId]),
     dbExecute('SELECT recommended_crops, created_at FROM crop_recommendations WHERE farmer_id = ? ORDER BY created_at DESC LIMIT 3', [farmerId]),
@@ -43,101 +50,82 @@ export async function runReportAgent(
     dbExecute('SELECT report_text, generated_at FROM reports WHERE farmer_id = ? ORDER BY generated_at DESC LIMIT 1', [farmerId]),
     dbExecute('SELECT interaction_log, session_date FROM session_logs WHERE farmer_id = ? ORDER BY session_date DESC LIMIT 5', [farmerId]),
   ]);
-  trace.push(`Step 1 ✓: Fetched ${planRows.length} plan, ${recRows.length} recs, ${riskRows.length} risk logs.`);
-
-  // ── Step 2: Compile data summary ──
-  trace.push('Step 2: Compiling data summary for AI synthesis...');
 
   const latestPlan = planRows[0];
-  const latestRecs = recRows.map((r) => `${r.created_at}: ${r.recommended_crops}`).join('\n') || 'No recommendations yet.';
-  const latestRisks = riskRows.map((r) => `${r.logged_at}: ${r.risk_level} (${r.risk_probability}%) — ${r.suggested_action}`).join('\n') || 'No risk logs yet.';
-  const recentActivity = sessionRows
-    .map((s) => { try { return JSON.parse(s.interaction_log as string); } catch { return { summary: s.interaction_log }; } })
-    .map((m: Record<string, string>) => m.summary || '')
-    .join('\n') || 'No recent activity.';
-
   const profile = farmerProfile;
-  const dataSummary = `
-FARMER: ${profile?.name || 'Unknown'}, ${profile?.location || 'India'}
-LAND: ${profile?.land_size || '?'} acres | WATER: ${profile?.water_availability || '?'} | GOALS: ${profile?.farming_goals || '?'}
+  const dataSummary = `FARMER: ${profile?.name || 'Farmer'}, LAND: ${profile?.land_size}ac. CROP: ${latestPlan?.crop_name}. RISKS: ${riskRows[0]?.risk_level}.`;
 
-CURRENT CROP PLAN:
-- Crop: ${latestPlan?.crop_name || 'None'}
-- Status: ${latestPlan?.status || 'N/A'}
-- Sowing: ${latestPlan?.sowing_schedule || 'N/A'}
-- Irrigation: ${latestPlan?.irrigation_plan || 'N/A'}
-- Fertilizer: ${latestPlan?.fertilizer_schedule || 'N/A'}
-- Pest Alerts: ${latestPlan?.pest_alerts || 'N/A'}
-- Harvest: ${latestPlan?.harvest_timeline || 'N/A'}
-
-PAST CROP RECOMMENDATIONS:
-${latestRecs}
-
-NUTRIENT RISK HISTORY (last 5):
-${latestRisks}
-
-RECENT AGENT ACTIVITY:
-${recentActivity}
-  `.trim();
-
-  trace.push('Step 2 ✓: Data compiled from all 5 database tables.');
-
-  // ── Step 3: Call Gemini for synthesis ──
-  trace.push('Step 3: Calling Gemini AI to synthesize comprehensive report...');
+  trace.push('Step 2: Calling AI...');
   try {
-    const model = getJsonModel(SYSTEM_INSTRUCTION, { temperature: 0.3, maxTokens: 1500 });
-    const userPrompt = `Generate a comprehensive farm advisory report from this data:
+    const model = getJsonModel(SYSTEM_INSTRUCTION, { temperature: 0.2 });
 
-${dataSummary}
+    const userPrompt = `Generate a professional farm advisory report for this farmer's data:
 
-Return JSON:
+FARMER: ${profile?.name || 'Farmer'}, Location: ${profile?.location || profile?.district || 'India'}
+LAND: ${profile?.land_size || profile?.land_acres || '?'} acres | WATER: ${profile?.water_availability || profile?.irrigation || 'Unknown'} | GOALS: ${profile?.farming_goals || 'Maximize yield'}
+CROP: ${latestPlan?.crop_name || recRows[0]?.recommended_crops || 'General farming'}
+STATUS: ${latestPlan?.status || 'Active'}
+SOWING: ${latestPlan?.sowing_schedule || 'N/A'} | HARVEST: ${latestPlan?.harvest_timeline || 'N/A'}
+NUTRIENT RISKS: ${riskRows[0] ? `${riskRows[0].risk_level} risk (${riskRows[0].risk_probability}%) — ${riskRows[0].suggested_action}` : 'None recorded'}
+PAST RECOMMENDATIONS: ${recRows.map((r) => r.recommended_crops).join(', ') || 'None yet'}
+
+Return ONLY valid JSON with this exact schema:
 {
-  "report": "Full formatted report text (use \\n for line breaks, ** for bold headers). 300-400 words.",
+  "report": "A 200-250 word professional overview with **bold** key points and newlines. Cover current status, risks, and strategic advice.",
+  "crop_lifecycle": [
+    { "phase": "Preparation", "duration": "Weeks 1-2", "status": "Completed", "outcome_goal": "Optimal soil and seed readiness", "action_items": ["Action 1", "Action 2"] },
+    { "phase": "Sowing", "duration": "Week 3", "status": "Upcoming", "outcome_goal": "Uniform germination across field", "action_items": ["Action 1", "Action 2"] },
+    { "phase": "Growth", "duration": "Weeks 4-10", "status": "Upcoming", "outcome_goal": "Strong vegetative development", "action_items": ["Action 1", "Action 2"] },
+    { "phase": "Protection", "duration": "Weeks 6-12", "status": "Upcoming", "outcome_goal": "Zero pest/disease losses", "action_items": ["Action 1", "Action 2"] },
+    { "phase": "Harvest", "duration": "Weeks 14-16", "status": "Not Started", "outcome_goal": "Maximum yield at optimal maturity", "action_items": ["Action 1", "Action 2"] }
+  ],
   "sections": {
-    "farmer_summary": "1-2 sentences about farmer profile",
-    "crop_recommendation": "Summary of crop recommendation history and current best choice",
-    "crop_plan": "Current plan status and key milestones",
-    "nutrient_status": "Nutrient health assessment based on risk logs",
-    "disease_history": "Any disease risks or diagnosis notes",
-    "weather_summary": "General weather and seasonal guidance",
-    "action_items": ["Priority action 1", "Priority action 2", "Priority action 3", "Priority action 4", "Priority action 5"]
+    "farmer_summary": "1-2 sentences about this farmer's context.",
+    "crop_recommendation": "What crop/variety is best and why.",
+    "crop_plan": "Current plan status and next milestones.",
+    "nutrient_status": "Soil health and fertilizer guidance.",
+    "disease_history": "Disease risks and prevention steps.",
+    "weather_summary": "Seasonal weather impact and adjustments.",
+    "action_items": ["Top priority 1", "Top priority 2", "Top priority 3", "Top priority 4", "Top priority 5"]
   }
 }`;
 
-    const result = await withTimeout(model.generateContent(userPrompt), 30_000);
+    const result = await withTimeout(model.generateContent(userPrompt), 90_000);
     const data = JSON.parse(result.response.text()) as ReportData;
-    trace.push('Step 3 ✓: Report synthesized by Gemini AI.');
-
-    // ── Step 4: Save report to DB ──
-    trace.push('Step 4: Saving report to database...');
-    void dbExecute('INSERT INTO reports (farmer_id, report_text) VALUES (?, ?)', [farmerId, data.report]);
-    void saveMemory(farmerId, 'report', `Final advisory report generated. Actions: ${data.sections.action_items?.slice(0, 2).join('; ')}`);
-    trace.push('Step 4 ✓: Report saved.');
+    
+    // Ensure report is a string (handle cases where AI returns an object or array)
+    if (typeof data.report !== 'string') {
+      data.report = JSON.stringify(data.report);
+    }
+    
+    await dbExecute('INSERT INTO reports (farmer_id, report_text) VALUES (?, ?)', [farmerId, data.report]);
+    
+    void logAgentAction({
+      farmerId,
+      agent: 'report',
+      actionType: 'synthesis',
+      input: 'Synthesis request',
+      output: 'Report generated',
+      metadata: data.sections
+    });
 
     return { success: true, data, trace };
   } catch (err) {
-    trace.push(`Step 3 ✗: Gemini failed — ${err instanceof Error ? err.message : err}`);
-    console.error('ReportAgent error:', err);
-
-    // Fallback: plain text report
-    const fallbackReport = `## SuperFarmer Advisory Report\n\n**Farmer:** ${profile?.name || 'Farmer'} | ${profile?.location}\n**Land:** ${profile?.land_size} acres\n\n**Current Crop:** ${latestPlan?.crop_name || 'Not set'} (${latestPlan?.status || 'Active'})\n\n**Nutrient Status:** ${riskRows[0] ? `Last reading: ${riskRows[0].risk_level} risk (${riskRows[0].risk_probability}%)` : 'No readings yet.'}\n\n**Recent Recommendations:** ${recRows[0]?.recommended_crops || 'None yet.'}\n\n**Action Items:**\n1. Continue monitoring soil nutrient levels weekly\n2. Follow the irrigation schedule in your crop plan\n3. Scout for pests twice weekly\n4. Use the Disease Diagnosis tool if symptoms appear\n5. Generate a new recommendation before the next planting season`;
-
-    void dbExecute('INSERT INTO reports (farmer_id, report_text) VALUES (?, ?)', [farmerId, fallbackReport]);
-    return {
-      success: true,
-      data: {
-        report: fallbackReport,
-        sections: {
-          farmer_summary: `${profile?.name} farms ${profile?.land_size} acres in ${profile?.location}.`,
-          crop_recommendation: recRows[0]?.recommended_crops as string || 'No recommendations yet.',
-          crop_plan: `Current crop: ${latestPlan?.crop_name || 'Not set'}.`,
-          nutrient_status: riskRows[0] ? `${riskRows[0].risk_level} risk.` : 'No data.',
-          disease_history: 'No disease data available.',
-          weather_summary: 'Check weather regularly for farming decisions.',
-          action_items: ['Monitor soil weekly', 'Follow irrigation plan', 'Scout for pests', 'Check disease tool if needed', 'Update crop plan each season'],
-        },
-      },
-      trace,
+    trace.push(`Error: ${err instanceof Error ? err.message : err}`);
+    // Minimal fallback
+    const fallback: ReportData = {
+      report: "Advisory generated. Please check individual agent logs for details.",
+      crop_lifecycle: [],
+      sections: {
+        farmer_summary: "Profile exists.",
+        crop_recommendation: "Check rec history.",
+        crop_plan: "Plan active.",
+        nutrient_status: "Check risk log.",
+        disease_history: "No recent alerts.",
+        weather_summary: "Check forecast.",
+        action_items: ["Monitor soil", "Follow plan"]
+      }
     };
+    return { success: true, data: fallback, trace };
   }
 }

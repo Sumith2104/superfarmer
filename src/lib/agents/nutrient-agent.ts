@@ -2,7 +2,7 @@
 // PredictiveNutrientAgent — ML heuristic + auto-triggers DynamicReplannerAgent on HIGH risk
 
 import { dbExecute } from '@/lib/fluxbase';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import { runReplannerAgent } from './replanner-agent';
 import type { AgentContext, AgentResult } from './types';
 import type { ReplannerData } from './replanner-agent';
@@ -90,7 +90,15 @@ export async function runNutrientAgent(
       'INSERT INTO nutrient_risk_log (farmer_id, plan_id, risk_probability, risk_level, suggested_action) VALUES (?, ?, ?, ?, ?)',
       [farmerId, planId || null, probability, risk_level, suggestion]
     );
-    void saveMemory(farmerId, 'nutrient-risk', `${risk_level} risk (${probability}%). ${suggestion.slice(0, 80)}`);
+    void logAgentAction({
+      farmerId,
+      agent: 'nutrient',
+      actionType: 'risk_assessment',
+      input: `N:${input.n} P:${input.p} K:${input.k} Moisture:${input.moisture} Temp:${input.temp} DaysFert:${input.days_fert}`,
+      output: suggestion,
+      toolsUsed: ['heuristic-risk-model'],
+      metadata: { risk_level, probability, n: input.n, p: input.p, k: input.k },
+    });
   }
   trace.push('Step 2 ✓: Risk logged to database.');
 

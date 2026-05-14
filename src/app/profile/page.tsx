@@ -32,12 +32,16 @@ const CROPS = [
   { value: 'Jowar', emoji: '🌿' },
 ];
 const LANGUAGES = [
-  { value: 'hi', flag: '🇮🇳', label: 'हिन्दी' },
-  { value: 'mr', flag: '🇮🇳', label: 'मराठी' },
-  { value: 'te', flag: '🇮🇳', label: 'తెలుగు' },
-  { value: 'kn', flag: '🇮🇳', label: 'ಕನ್ನಡ' },
-  { value: 'ta', flag: '🇮🇳', label: 'தமிழ்' },
-  { value: 'en', flag: '🇬🇧', label: 'English' },
+  { value: 'hi', flag: '🇮🇳', label: 'हिन्दी',    sublabel: 'Hindi' },
+  { value: 'kn', flag: '🇮🇳', label: 'ಕನ್ನಡ',    sublabel: 'Kannada' },
+  { value: 'ta', flag: '🇮🇳', label: 'தமிழ்',    sublabel: 'Tamil' },
+  { value: 'te', flag: '🇮🇳', label: 'తెలుగు',   sublabel: 'Telugu' },
+  { value: 'ml', flag: '🇮🇳', label: 'മലയാളം',  sublabel: 'Malayalam' },
+  { value: 'mr', flag: '🇮🇳', label: 'मराठी',    sublabel: 'Marathi' },
+  { value: 'gu', flag: '🇮🇳', label: 'ગુજરાતી',  sublabel: 'Gujarati' },
+  { value: 'pa', flag: '🇮🇳', label: 'ਪੰਜਾਬੀ',   sublabel: 'Punjabi' },
+  { value: 'or', flag: '🇮🇳', label: 'ଓଡ଼ିଆ',   sublabel: 'Odia' },
+  { value: 'en', flag: '🇬🇧', label: 'English',  sublabel: 'English' },
 ];
 
 const STEPS = [
@@ -135,14 +139,14 @@ export default function ProfilePage() {
           <span>Step {step + 1} of {STEPS.length} — {STEPS[step]}</span>
           <span>{pct}%</span>
         </div>
-        <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#16a34a,#4ade80)', borderRadius: 999, transition: 'width 0.4s ease' }} />
+        <div style={{ height: 6, background: 'rgba(0,0,0,0.1)', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--green-400)', borderRadius: 999, transition: 'width 0.4s ease' }} />
         </div>
         <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.6rem' }}>
           {STEPS.map((s, i) => (
             <button key={s} onClick={() => i < step && setStep(i)}
               style={{ flex: 1, height: 4, borderRadius: 999, border: 'none', cursor: i < step ? 'pointer' : 'default',
-                background: i < step ? 'var(--green-500)' : i === step ? 'var(--green-600)' : 'rgba(255,255,255,0.1)' }} />
+                background: i <= step ? 'var(--green-400)' : 'rgba(0,0,0,0.1)' }} />
           ))}
         </div>
       </div>
@@ -249,16 +253,22 @@ export default function ProfilePage() {
         {step === 4 && (
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Choose your preferred language for voice assistant:
+              Choose your preferred language for the AI voice assistant:
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.6rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
               {LANGUAGES.map(l => (
                 <button key={l.value}
                   className={`icon-card ${form.preferred_lang === l.value ? 'selected' : ''}`}
                   onClick={() => { set('preferred_lang', l.value); setLang(l.value); }}
-                  style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: '0.75rem', padding: '0.9rem 1rem', minHeight: 56 }}>
-                  <span style={{ fontSize: '1.6rem' }}>{l.flag}</span>
-                  <span style={{ fontSize: '1rem', fontWeight: 600 }}>{l.label}</span>
+                  style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: '0.65rem', padding: '0.75rem 0.9rem', minHeight: 52 }}>
+                  <span style={{ fontSize: '1.5rem' }}>{l.flag}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.05rem' }}>
+                    <span style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}>{l.label}</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 400 }}>{l.sublabel}</span>
+                  </div>
+                  {form.preferred_lang === l.value && (
+                    <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: '1rem' }}>✓</span>
+                  )}
                 </button>
               ))}
             </div>

@@ -2,7 +2,7 @@
 // WeatherAgent — fetches 3-day forecast and provides agricultural advice using Gemini + rule fallbacks
 
 import { getJsonModel, withTimeout } from '@/lib/gemini';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import type { AgentContext, AgentResult } from './types';
 
 export interface WeatherData {
@@ -137,7 +137,15 @@ export async function runWeatherAgent(
     const analysis = `**3-Day Forecast for ${location}** (${rawData.source})\n${rawData.forecast}\nTotal Rain: **${rawData.rain.toFixed(1)}mm** | Peak Temp: **${rawData.temp.toFixed(1)}°C**\n\n**🌾 Agent Suggestion:** ${suggestion}`;
 
     if (farmerId) {
-      void saveMemory(farmerId, 'weather', `Weather check for ${location}: ${rawData.temp.toFixed(1)}°C max, ${rawData.rain.toFixed(1)}mm rain. Advice: ${suggestion.slice(0, 100)}...`);
+      void logAgentAction({
+        farmerId,
+        agent: 'weather',
+        actionType: 'forecast',
+        input: `Location: ${location}`,
+        output: `Rain: ${rawData.rain.toFixed(1)}mm. Temp: ${rawData.temp.toFixed(1)}°C. Advice: ${suggestion}`,
+        toolsUsed: [rawData.source === 'OpenWeatherMap' ? 'openweather-api' : 'open-meteo-api'],
+        metadata: { location, total_rain: rawData.rain, peak_temp: rawData.temp, source: rawData.source },
+      });
     }
 
     return {

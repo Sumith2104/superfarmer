@@ -10,9 +10,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Please login to use the Spatial Planner.' }, { status: 401 });
 
   const body = await req.json();
-  const { width, height, main_crop, companion_crops, land_size, view_mode } = body;
+  const { width, height, main_crop, companion_crops, land_size, layout_mode } = body;
   const ctx = await buildContext(session.userId, session.farmerId, session.planId);
-  const result = await runSpatialAgent(ctx, { width, height, main_crop, companion_crops, land_size, view_mode });
+  const result = await runSpatialAgent(ctx, { width, height, main_crop, companion_crops, land_size, layout_mode });
 
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 });
   return NextResponse.json(result.data);

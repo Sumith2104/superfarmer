@@ -7,6 +7,8 @@ import { NextRequest } from 'next/server';
 import { getSession } from '@/lib/session';
 import { buildContext } from '@/lib/agents/context';
 import { runChatAgent } from '@/lib/agents/chat-agent';
+import { getMemoryByAgent } from '@/lib/agents/memory';
+import { NextResponse } from 'next/server';
 
 export const maxDuration = 60; // Allow up to 60s for agentic loops
 
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      function emit(event: { type: string; message: string; toolsUsed?: string[] }) {
+      function emit(event: { type: string; message: string; toolsUsed?: string[]; data?: any }) {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         } catch {
@@ -59,8 +61,8 @@ export async function POST(req: NextRequest) {
           finalQuestion,
           imageBase64 || undefined,
           conversationHistory || [],
-          ({ type, message }) => {
-            emit({ type, message });
+          ({ type, message, data }) => {
+            emit({ type, message, data });
           }
         );
 
@@ -96,4 +98,19 @@ export async function POST(req: NextRequest) {
       'X-Accel-Buffering': 'no',
     },
   });
+}
+
+export async function GET() {
+  const session = await getSession();
+  if (!session.farmerId) {
+    return NextResponse.json([]);
+  }
+  
+  try {
+    const memory = await getMemoryByAgent(session.farmerId, 'agent-chat', 30);
+    return NextResponse.json(memory);
+  } catch (err) {
+    console.error('Failed to fetch agent chat history:', err);
+    return NextResponse.json([]);
+  }
 }

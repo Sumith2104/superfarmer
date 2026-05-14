@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import styles from './Navbar.module.css';
 import {
   CropIcon, PlanIcon, DiseaseIcon, MapIcon,
-  ChatIcon, BrainIcon, ZapIcon, ProfileIcon, LogoutIcon, LeafIcon,
+  ChatIcon, ProfileIcon, LogoutIcon, LeafIcon, ReportIcon, FileIcon
 } from './Icons';
 
 const navLinks = [
@@ -16,8 +16,7 @@ const navLinks = [
   { href: '/disease',         Icon: DiseaseIcon, label: 'Disease' },
   { href: '/spatial-planner', Icon: MapIcon,     label: 'Spatial' },
   { href: '/agent-chat',      Icon: ChatIcon,    label: 'AI Chat' },
-  { href: '/memory',          Icon: BrainIcon,   label: 'Memory' },
-  { href: '/agents',          Icon: ZapIcon,     label: 'Agents' },
+  { href: '/report',          Icon: ReportIcon,  label: 'Report' },
   { href: '/profile',         Icon: ProfileIcon, label: 'Profile' },
 ];
 
@@ -52,7 +51,7 @@ export default function Navbar() {
       <div className={styles.inner}>
         {/* Logo */}
         <Link href="/" className={styles.logo}>
-          <LeafIcon size={20} color="#4ade80" />
+          <LeafIcon size={20} color="currentColor" />
           <span>SuperFarmer</span>
         </Link>
 
@@ -67,7 +66,7 @@ export default function Navbar() {
                   href={href}
                   className={`${styles.link} ${active ? styles.active : ''}`}
                 >
-                  <Icon size={15} color={active ? '#4ade80' : '#86efac'} />
+                  <Icon size={15} color="currentColor" />
                   <span>{label}</span>
                 </Link>
               );

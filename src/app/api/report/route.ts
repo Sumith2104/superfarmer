@@ -10,11 +10,15 @@ export async function GET() {
     return NextResponse.json({ error: 'Farmer profile required. Please complete intake first.' }, { status: 401 });
 
   const ctx = await buildContext(session.userId!, session.farmerId, session.planId);
+  if (!ctx.farmerProfile) {
+    return NextResponse.json({ error: 'Farmer profile not found in database. Please re-complete intake.' }, { status: 404 });
+  }
   const result = await runReportAgent(ctx);
 
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 });
   return NextResponse.json({
     report: result.data!.report,
+    crop_lifecycle: result.data!.crop_lifecycle ?? [],
     sections: result.data!.sections,
     trace: result.trace,
   });

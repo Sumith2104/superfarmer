@@ -35,15 +35,15 @@ function getCropEmoji(name: string) {
 }
 
 const PROFIT_COLOR = {
-  High: { bg: 'rgba(22,163,74,0.2)', text: '#4ade80', bar: '#22c55e' },
-  Medium: { bg: 'rgba(234,179,8,0.15)', text: '#fbbf24', bar: '#f59e0b' },
-  Low: { bg: 'rgba(239,68,68,0.12)', text: '#fca5a5', bar: '#ef4444' },
+  High: { bg: 'rgba(22,163,74,0.15)', text: '#16a34a', bar: '#22c55e' },
+  Medium: { bg: 'rgba(234,179,8,0.15)', text: '#d97706', bar: '#f59e0b' },
+  Low: { bg: 'rgba(239,68,68,0.12)', text: '#dc2626', bar: '#ef4444' },
 };
 
 const CONFIDENCE_COLOR: Record<string, string> = {
-  'Highly Recommended': '#22c55e',
-  'Recommended': '#a3e635',
-  'Worth Considering': '#fbbf24',
+  'Highly Recommended': '#16a34a',
+  'Recommended': '#65a30d',
+  'Worth Considering': '#d97706',
 };
 
 export default function RecommendationPage() {
@@ -55,6 +55,14 @@ export default function RecommendationPage() {
     goal: 'Maximum yield and profit',
     farm_size: '',
     location: '',
+    // ML Parameters
+    n: '50',
+    p: '50',
+    k: '50',
+    ph: '6.5',
+    temp: '25',
+    humidity: '60',
+    rainfall: '100',
   });
   const [result, setResult] = useState<RecResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -171,6 +179,44 @@ export default function RecommendationPage() {
               </div>
             </div>
 
+            <div style={{ marginTop: '1.5rem', marginBottom: '1.5rem', padding: '1rem', background: 'rgba(22,163,74,0.04)', borderRadius: 12, border: '1px solid var(--glass-border)' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--green-400)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Advanced ML Soil Parameters
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Enter precise values to feed directly into the Random Forest model.</p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                <div className="form-group">
+                  <label>Nitrogen (N)</label>
+                  <input type="number" className="form-control" value={form.n} onChange={(e) => update('n', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Phosphorus (P)</label>
+                  <input type="number" className="form-control" value={form.p} onChange={(e) => update('p', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Potassium (K)</label>
+                  <input type="number" className="form-control" value={form.k} onChange={(e) => update('k', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>pH Level</label>
+                  <input type="number" step="0.1" className="form-control" value={form.ph} onChange={(e) => update('ph', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Temp (°C)</label>
+                  <input type="number" step="0.1" className="form-control" value={form.temp} onChange={(e) => update('temp', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Humidity (%)</label>
+                  <input type="number" step="0.1" className="form-control" value={form.humidity} onChange={(e) => update('humidity', e.target.value)} />
+                </div>
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label>Rainfall (mm)</label>
+                  <input type="number" step="0.1" className="form-control" value={form.rainfall} onChange={(e) => update('rainfall', e.target.value)} />
+                </div>
+              </div>
+            </div>
+
             <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '1rem', fontSize: '1rem' }}>
               {loading ? <><span className="spinner" /> Consulting AI Agronomist...</> : '🤖 Get AI Recommendation'}
             </button>
@@ -183,8 +229,8 @@ export default function RecommendationPage() {
           </form>
         </div>
 
-        {/* RESULTS */}
-        {result && (
+        {/* RESULTS / EMPTY STATE */}
+        {result ? (
           <div className="fade-in">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
               {result.ai_powered && (
@@ -203,7 +249,7 @@ export default function RecommendationPage() {
                   <div
                     key={i}
                     style={{
-                      background: i === 0 ? 'linear-gradient(135deg, rgba(22,163,74,0.12), rgba(15,26,18,0.8))' : 'var(--glass)',
+                      background: i === 0 ? 'linear-gradient(135deg, rgba(22,163,74,0.15), rgba(74,222,128,0.05))' : 'var(--glass)',
                       border: `1px solid ${i === 0 ? 'rgba(74,222,128,0.4)' : 'var(--glass-border)'}`,
                       borderRadius: 14,
                       padding: '1.25rem 1.5rem',
@@ -231,15 +277,14 @@ export default function RecommendationPage() {
                       )}
                     </div>
 
-                    {/* Stats row */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>DURATION</div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{crop.growing_days || (i === 0 ? '90–120 days' : i === 1 ? '80–100 days' : '60–90 days')}</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>{crop.growing_days || (i === 0 ? '90–120 days' : i === 1 ? '80–100 days' : '60–90 days')}</div>
                       </div>
-                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>MANDI PRICE</div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{crop.market_price || '₹ Market rate'}</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>{crop.market_price || '₹ Market rate'}</div>
                       </div>
                       <div style={{ background: profitStyle.bg, borderRadius: 8, padding: '0.5rem 0.65rem', textAlign: 'center', border: `1px solid ${profitStyle.text}33` }}>
                         <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>PROFIT</div>
@@ -277,11 +322,24 @@ export default function RecommendationPage() {
 
             {/* Agronomist advice */}
             {result.overall_advice && (
-              <div className="card" style={{ background: 'rgba(234,179,8,0.06)', borderColor: 'rgba(234,179,8,0.25)', padding: '1.1rem 1.4rem' }}>
-                <div style={{ fontWeight: 700, color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.9rem' }}>🧑‍🌾 Agronomist&apos;s Overall Advice</div>
-                <p style={{ margin: 0, color: '#fde68a', fontSize: '0.88rem', lineHeight: 1.7 }}>{result.overall_advice}</p>
+              <div className="card" style={{ background: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.25)', padding: '1.1rem 1.4rem' }}>
+                <div style={{ fontWeight: 700, color: '#d97706', marginBottom: '0.5rem', fontSize: '0.9rem' }}>🧑‍🌾 Agronomist&apos;s Overall Advice</div>
+                <p style={{ margin: 0, color: '#92400e', fontSize: '0.88rem', lineHeight: 1.7 }}>{result.overall_advice}</p>
               </div>
             )}
+          </div>
+        ) : (
+          <div className="fade-in" style={{ 
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+            height: '100%', minHeight: '400px', 
+            background: 'rgba(22,163,74,0.02)', border: '1px dashed rgba(74,222,128,0.4)', 
+            borderRadius: 16, padding: '3rem 2rem', textAlign: 'center' 
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '1.5rem', animation: 'float 3s ease-in-out infinite' }}>🌱</div>
+            <h3 style={{ fontSize: '1.4rem', color: 'var(--green-600)', marginBottom: '0.75rem', fontWeight: 700 }}>Ready to analyze your farm</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', maxWidth: '300px', lineHeight: 1.6 }}>
+              Fill out the details on the left and click "Get AI Recommendation" to receive your custom crop plan, generated by our machine learning models.
+            </p>
           </div>
         )}
       </div>

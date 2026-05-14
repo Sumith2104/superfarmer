@@ -9,6 +9,7 @@ export interface FarmerProfile {
   location: string;
   water_availability: string;
   farming_goals: string;
+  preferred_lang?: string;
 }
 
 export interface AgentContext {

@@ -17,7 +17,7 @@ export interface ChatData {
   thinkingSteps?: string[];
 }
 
-const MAX_ITERATIONS = 6; // Safety cap — prevents infinite loops
+const MAX_ITERATIONS = 12; // Increased to allow more room for complex reasoning
 const groqApiKey = process.env.GROQ_API_KEY || '';
 
 const AGENT_SYSTEM_PROMPT = `You are SuperFarmer AI — an expert farming advisor for Indian farmers. Use tools to fetch real data; never invent facts.
@@ -30,9 +30,13 @@ Rules:
 5. "My plan" / "what's next" → get_crop_plan.
 6. "Farm status" / "full report" → generate_crop_report.
 7. Price/mandi questions → get_mandi_prices.
-8. "Remind me" → save_reminder.
-9. Chain tools as needed; each tool only once unless allowed.
-10. Synthesize a warm, practical answer after tool results.
+8. Weather/irrigation timing → get_weather_forecast.
+9. "Remind me" → save_reminder.
+10. "Make a plan detailed" / "generate layout" / "spatial twin" → generate_spatial_twin.
+11. IMPORTANT: Call MULTIPLE tools in parallel in a single response whenever possible (e.g. call profile, plan, and memory at the same time).
+12. Chain tools as needed; each tool only once unless allowed.
+13. Synthesize a warm, practical answer after tool results.
+14. VERY IMPORTANT: If a tool returns Recommended Products with Amazon links, you MUST include those exact markdown links in your final response to the user!
 
 Style: friendly, simple language, 1-2 actionable next steps.`;
 
@@ -47,11 +51,11 @@ async function callGroq(messages: object[], tools: object[], retryOnRateLimit = 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama-3.3-70b-versatile',
       messages,
       tools,
       tool_choice: 'auto',
-      max_tokens: 600,
+      max_tokens: 800,
       temperature: 0.4,
     }),
   });
@@ -81,7 +85,7 @@ export async function runChatAgent(
   question: string,
   imageBase64?: string,
   sessionHistory: { role: 'user' | 'assistant'; content: string }[] = [],
-  onEvent?: (event: { type: 'thinking' | 'tool_start' | 'tool_done'; message: string }) => void
+  onEvent?: (event: { type: 'thinking' | 'tool_start' | 'tool_done' | 'tool_data'; message: string; data?: any }) => void
 ): Promise<AgentResult<ChatData>> {
   const trace: string[] = [];
   const toolsUsed: string[] = [];
@@ -105,8 +109,15 @@ export async function runChatAgent(
     content: m.content,
   }));
 
+  const langPref = ctx.farmerProfile?.preferred_lang || 'en';
+  const langInstruction = langPref !== 'en' 
+    ? `\n\nCRITICAL LANGUAGE INSTRUCTION: 
+1. You MUST translate and write your FINAL RESPONSE exclusively in the language code: '${langPref}'. Do not use English script in the final answer, use the native script of '${langPref}'.
+2. However, when calling ANY tools, you MUST pass all arguments in English! Translate the user's input to English internally before passing it into a tool's JSON arguments. Tool arguments must be in English.` 
+    : '';
+
   const messages: object[] = [
-    { role: 'system', content: AGENT_SYSTEM_PROMPT },
+    { role: 'system', content: AGENT_SYSTEM_PROMPT + langInstruction },
     ...historyMessages,
     { role: 'user', content: imageBase64
       ? `${question}\n\n[A crop/leaf photo has been attached by the farmer. When calling diagnose_crop_disease, the image will be automatically used for visual analysis.]`
@@ -118,7 +129,7 @@ export async function runChatAgent(
   // Track which tools have been called — prevent the same read-only tool being called twice
   const calledTools = new Set<string>();
   // Tools that are safe to call multiple times (e.g. price lookups with different args)
-  const MULTI_CALL_ALLOWED = new Set(['get_mandi_prices', 'diagnose_crop_disease', 'save_reminder']);
+  const MULTI_CALL_ALLOWED = new Set(['get_mandi_prices', 'save_reminder']);
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     trace.push(`Iteration ${iteration + 1}: Calling Groq orchestrator...`);
@@ -159,7 +170,6 @@ export async function runChatAgent(
           toolsUsed.length > 0 ? `Tools used: ${toolsUsed.join(', ')}` : null,
         ].filter(Boolean).join(' | ');
 
-        void saveMemory(farmerId, 'agent-chat', memorySummary);
         // Log to top-level agent_memory table
         void logAgentAction({
           farmerId,
@@ -169,16 +179,6 @@ export async function runChatAgent(
           output: finalAnswer.slice(0, 800),
           toolsUsed,
         });
-        void dbExecute(
-          'INSERT INTO session_logs (farmer_id, interaction_log) VALUES (?, ?)',
-          [farmerId, JSON.stringify({
-            agent: 'agentic-chat',
-            question: question.slice(0, 200),
-            answer: finalAnswer.slice(0, 400),
-            toolsUsed,
-            timestamp: new Date().toISOString(),
-          })]
-        );
       }
 
       return {
@@ -193,7 +193,7 @@ export async function runChatAgent(
 
     trace.push(`Iteration ${iteration + 1}: ${message.tool_calls.length} tool call(s) requested.`);
 
-    for (const call of message.tool_calls) {
+    const toolPromises = message.tool_calls.map(async (call: any) => {
       const toolName = call.function.name as FarmToolName;
       let toolArgs: Record<string, string> = {};
 
@@ -206,12 +206,11 @@ export async function runChatAgent(
       // ── Dedup: skip read-only tools that were already called this loop ──
       if (calledTools.has(toolName) && !MULTI_CALL_ALLOWED.has(toolName)) {
         trace.push(`  ⟳ Skipping duplicate call to ${toolName}`);
-        messages.push({
+        return {
           role: 'tool',
           tool_call_id: call.id,
           content: `[Already retrieved — use the earlier ${toolName} result from above]`,
-        });
-        continue;
+        };
       }
       calledTools.add(toolName);
 
@@ -225,7 +224,8 @@ export async function runChatAgent(
           toolName,
           toolArgs,
           ctx,
-          (msg) => emit('thinking', msg)
+          (msg) => emit('thinking', msg),
+          (data) => onEvent?.({ type: 'tool_data', message: '', data })
         );
         emit('tool_done', `✅ ${toolResult.split('\n')[0]}`);
         trace.push(`  ← Tool result: ${toolResult.slice(0, 80)}...`);
@@ -234,12 +234,15 @@ export async function runChatAgent(
         trace.push(`  ← Tool failed: ${toolResult}`);
       }
 
-      messages.push({
+      return {
         role: 'tool',
         tool_call_id: call.id,
         content: toolResult,
-      });
-    }
+      };
+    });
+
+    const toolResults = await Promise.all(toolPromises);
+    messages.push(...toolResults);
 
     // Continue loop — Groq reads tool results and decides next action
   }

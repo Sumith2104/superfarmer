@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { speak, startListening, stopListening, isSpeechSupported, getLangCode } from '@/lib/voice';
 import { MicIcon, SpeakIcon, CropIcon, DiseaseIcon, MoneyIcon, PlanIcon, LeafIcon, CalendarIcon, SendIcon, CameraIcon, CheckIcon } from '@/components/Icons';
+import dynamic from 'next/dynamic';
+
+const FarmViewer3D = dynamic(() => import('@/components/FarmViewer3D'), { ssr: false });
 
 interface Message {
   role: 'user' | 'agent';
@@ -9,6 +12,7 @@ interface Message {
   timestamp: string;
   toolsUsed?: string[];
   isStreaming?: boolean;
+  layoutData?: any;
 }
 
 interface ThinkingStep {
@@ -16,49 +20,31 @@ interface ThinkingStep {
   done: boolean;
 }
 
-const QUICK_PROMPTS = [
-  { Icon: CropIcon,    color: '#4ade80', label: 'What to plant?',  text: 'What crop should I plant this season based on my soil and water?' },
-  { Icon: DiseaseIcon, color: '#f87171', label: 'Yellow leaves',   text: 'My crop leaves are turning yellow and falling off. What disease could this be?' },
-  { Icon: MoneyIcon,   color: '#fbbf24', label: 'Mandi price',     text: 'What is the current mandi price of wheat and rice?' },
-  { Icon: PlanIcon,    color: '#a78bfa', label: 'My crop plan',    text: 'Show me my current crop plan and what I should do next.' },
-  { Icon: LeafIcon,    color: '#34d399', label: 'Farm status',     text: 'How is my farm doing overall? Give me a complete status update.' },
-  { Icon: CalendarIcon,color: '#60a5fa', label: 'Set reminder',    text: 'Remind me to irrigate my fields on Thursday morning.' },
-];
+import { getAllUI } from '@/lib/i18n';
 
 const TOOL_ICONS: Record<string, string> = {
-  get_farmer_profile: '👤',
-  get_crop_plan: '📋',
-  get_crop_recommendations: '🌾',
-  diagnose_crop_disease: '🔬',
-  get_agent_memory: '🧠',
-  generate_crop_report: '📊',
-  get_mandi_prices: '💰',
-  save_reminder: '📝',
+  get_farmer_profile: '👤', get_crop_plan: '📋', get_crop_recommendations: '🌾',
+  diagnose_crop_disease: '🔬', get_agent_memory: '🧠', generate_crop_report: '📊',
+  get_mandi_prices: '💰', save_reminder: '📝', generate_spatial_twin: '🗺️',
 };
 
-const TOOL_LABELS: Record<string, string> = {
-  get_farmer_profile: 'Read farmer profile',
-  get_crop_plan: 'Fetched crop plan',
-  get_crop_recommendations: 'Got AI recommendations',
-  diagnose_crop_disease: 'Diagnosed disease',
-  get_agent_memory: 'Retrieved memory',
-  generate_crop_report: 'Generated report',
-  get_mandi_prices: 'Checked mandi prices',
-  save_reminder: 'Saved reminder',
-};
+function getDynamicLabels(lang: string) {
+  const t = getAllUI(lang);
+  return {
+    get_farmer_profile: t.tProfile, get_crop_plan: t.tPlan, get_crop_recommendations: t.tRec,
+    diagnose_crop_disease: t.tDisease, get_agent_memory: t.tMemory, generate_crop_report: t.tReport,
+    get_mandi_prices: t.tMandi, save_reminder: t.tRemind, generate_spatial_twin: t.tSpatial,
+  };
+}
 
 export default function AgentChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'agent',
-      text: "🌱 Hello! I'm your **SuperFarmer Agentic AI** — I can autonomously fetch your farm data, diagnose diseases, check prices, and more. Just ask me anything!",
-      timestamp: '', // filled client-side to avoid SSR hydration mismatch
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [toolsUsed, setToolsUsed] = useState<string[]>([]);
+  const [layoutData, setLayoutData] = useState<any>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   // In-session conversation history — sent to Groq on every turn so it remembers the current chat
@@ -66,12 +52,30 @@ export default function AgentChatPage() {
   const [dictating, setDictating] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [userLang, setUserLang] = useState('en'); // loaded from farmer profile
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const srRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setVoiceSupported(isSpeechSupported()); }, []);
+
+  // Load farmer's preferred language from profile and initialize greeting
+  useEffect(() => {
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      const pref = d.profile?.preferred_lang || 'en';
+      setUserLang(pref);
+      const t = getAllUI(pref);
+      if (messages.length === 0) {
+        setMessages([{ role: 'agent', text: t.hello, timestamp: new Date().toLocaleTimeString() }]);
+      }
+    }).catch(() => {
+      if (messages.length === 0) {
+        setMessages([{ role: 'agent', text: getAllUI('en').hello, timestamp: new Date().toLocaleTimeString() }]);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Parse numbered/bulleted steps from an AI response */
   function parseSteps(text: string): string[] {
@@ -89,10 +93,10 @@ export default function AgentChatPage() {
     srRef.current = startListening(
       (text) => { setLiveTranscript(text); setDictating(false); sendMessage(text); },
       () => setDictating(false),
-      getLangCode('en')
+      getLangCode(userLang)
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userLang]);
 
   const stopDictation = useCallback(() => {
     stopListening(srRef.current); srRef.current = null;
@@ -100,8 +104,8 @@ export default function AgentChatPage() {
   }, []);
 
   const speakMessage = useCallback((text: string) => {
-    speak(text, getLangCode('en'));
-  }, []);
+    speak(text, getLangCode(userLang));
+  }, [userLang]);
 
 
   // Auto-send if navigated from voice assistant with ?q= param
@@ -120,6 +124,37 @@ export default function AgentChatPage() {
   useEffect(() => {
     // Set greeting timestamp on client only to avoid SSR/client mismatch
     setMessages((prev) => prev.map((m, i) => i === 0 ? { ...m, timestamp: new Date().toLocaleTimeString() } : m));
+    
+    // Fetch conversation history
+    async function fetchHistory() {
+      try {
+        const res = await fetch('/api/agent-chat');
+        if (res.ok) {
+          const history = await res.json();
+          if (history && history.length > 0) {
+            const pastMessages: Message[] = [];
+            const pastConvo: { role: 'user' | 'assistant'; content: string }[] = [];
+            
+            // Memory is ordered created_at DESC (newest first), so reverse it
+            history.reverse().forEach((entry: any) => {
+              const time = new Date(entry.created_at).toLocaleTimeString();
+              pastMessages.push({ role: 'user', text: entry.input_text, timestamp: time });
+              pastMessages.push({ role: 'agent', text: entry.output_text, timestamp: time, toolsUsed: entry.tools_used || [] });
+              
+              pastConvo.push({ role: 'user', content: entry.input_text });
+              pastConvo.push({ role: 'assistant', content: entry.output_text });
+            });
+            
+            setMessages(prev => [...prev, ...pastMessages]);
+            setConversationHistory(pastConvo);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load chat history:', err);
+      }
+    }
+    
+    fetchHistory();
   }, []);
 
   useEffect(() => {
@@ -158,6 +193,7 @@ export default function AgentChatPage() {
     setLoading(true);
     setThinkingSteps([]);
     setToolsUsed([]);
+    setLayoutData(null);
     const sentImage = imageBase64;
     clearImage();
 
@@ -201,6 +237,15 @@ export default function AgentChatPage() {
           if (!line.startsWith('data: ')) continue;
           try {
             const event = JSON.parse(line.slice(6));
+            
+            // Translate live thinking messages
+            const t = getAllUI(userLang);
+            if (event.message.includes('SuperFarmer AI is thinking')) {
+               event.message = t.thinkBase;
+            } else if (event.message.includes('Calling tool: ')) {
+               const tool = event.message.replace('🔧 Calling tool: ', '').replace('...', '');
+               event.message = `🔧 ${t.thinkCall}${tool}...`;
+            }
 
             if (event.type === 'thinking' || event.type === 'tool_start') {
               setThinkingSteps((prev) => [...prev, { message: event.message, done: false }]);
@@ -208,6 +253,10 @@ export default function AgentChatPage() {
               setThinkingSteps((prev) =>
                 prev.map((s, i) => (i === prev.length - 1 ? { ...s, done: true } : s))
               );
+            } else if (event.type === 'tool_data') {
+              if (event.data?.type === 'spatial_twin') {
+                setLayoutData(event.data.layoutData);
+              }
             } else if (event.type === 'answer') {
               setToolsUsed(event.toolsUsed || []);
               setMessages((prev) => [
@@ -217,6 +266,7 @@ export default function AgentChatPage() {
                   text: event.message,
                   timestamp: new Date().toLocaleTimeString(),
                   toolsUsed: event.toolsUsed,
+                  layoutData: layoutData,
                 },
               ]);
               // Persist BOTH sides of this turn into session history
@@ -237,9 +287,10 @@ export default function AgentChatPage() {
         }
       }
     } catch {
+      const t = UI_T[userLang] || UI_T.en;
       setMessages((prev) => [
         ...prev,
-        { role: 'agent', text: '⚠️ Connection error. Please try again.', timestamp: new Date().toLocaleTimeString() },
+        { role: 'agent', text: t.errConn, timestamp: new Date().toLocaleTimeString() },
       ]);
       setThinkingSteps([]);
     } finally {
@@ -250,29 +301,45 @@ export default function AgentChatPage() {
   function formatText(text: string) {
     return text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; padding: 0.3rem 0.8rem; border-radius: 8px; text-decoration: none; font-size: 0.8rem; font-weight: 600; margin-top: 0.3rem;">$1</a>')
       .replace(/\n/g, '<br/>');
   }
 
-  const showQuickPrompts = messages.length <= 1;
+  const showQuickPrompts = true;
+  const t = getAllUI(userLang);
+  const toolLabels = getDynamicLabels(userLang);
+  
+  const QUICK_PROMPTS = [
+    { Icon: CropIcon,    color: '#4ade80', label: t.q1L,  text: t.q1T },
+    { Icon: DiseaseIcon, color: '#f87171', label: t.q2L,  text: t.q2T },
+    { Icon: MoneyIcon,   color: '#fbbf24', label: t.q3L,  text: t.q3T },
+    { Icon: PlanIcon,    color: '#a78bfa', label: t.q4L,  text: t.q4T },
+    { Icon: LeafIcon,    color: '#34d399', label: t.q5L,  text: t.q5T },
+    { Icon: CalendarIcon,color: '#60a5fa', label: t.q6L,  text: t.q6T },
+    { Icon: PlanIcon,    color: '#ec4899', label: t.q7L,  text: t.q7T },
+  ];
 
   return (
-    <div className="page-container" style={{ maxWidth: 800, height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
+    <div className="page-container" style={{ maxWidth: 1100, height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div className="page-header" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <h1 style={{ margin: 0 }}>🤖 AI Farm Assistant</h1>
+          <h1 style={{ margin: 0 }}>{t.header}</h1>
           <span style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '0.2rem 0.65rem', borderRadius: 999, letterSpacing: '0.08em' }}>
-            ⚡ AGENTIC
+            ⚡ {t.agentic}
           </span>
         </div>
-        <p>Autonomously calls tools, fetches your farm data, and reasons step-by-step.</p>
+        <p>{t.subtitle}</p>
       </div>
 
-      {/* Messages */}
-      <div
-        className="card fade-in"
-        style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem', marginBottom: '0.75rem', minHeight: 0 }}
-      >
+      <div style={{ display: 'flex', flex: 1, gap: '1.5rem', minHeight: 0, marginTop: '1rem' }}>
+        {/* Main Chat Column */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, gap: '0.75rem' }}>
+          {/* Messages */}
+          <div
+            className="card fade-in"
+            style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem', minHeight: 0 }}
+          >
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: '0.5rem', alignItems: 'flex-start' }}>
             {m.role === 'agent' && (
@@ -282,12 +349,12 @@ export default function AgentChatPage() {
             )}
             <div style={{
               maxWidth: '75%',
-              background: m.role === 'user' ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${m.role === 'user' ? 'transparent' : 'var(--glass-border)'}`,
+              background: m.role === 'user' ? 'var(--green-400)' : 'var(--bg-2)',
+              color: m.role === 'user' ? '#fff' : 'var(--text)',
+              border: `1px solid ${m.role === 'user' ? 'var(--green-500)' : 'var(--glass-border)'}`,
               borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
               padding: '0.8rem 1.1rem',
-              backdropFilter: 'blur(12px)',
-              boxShadow: m.role === 'user' ? '0 4px 15px rgba(22,163,74,0.3)' : 'none',
+              boxShadow: 'none',
             }}>
               <div style={{ fontSize: '0.92rem', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: formatText(m.text) }} />
               {/* Tools used badges */}
@@ -296,17 +363,29 @@ export default function AgentChatPage() {
                   {m.toolsUsed.map((tool, idx) => (
                     <span
                       key={`${tool}-${idx}`}
-                      title={TOOL_LABELS[tool] || tool}
+                      title={toolLabels[tool] || tool}
                       style={{ fontSize: '0.65rem', background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 999, padding: '0.15rem 0.5rem', color: '#c4b5fd' }}
                     >
-                      {TOOL_ICONS[tool] || '🔧'} {TOOL_LABELS[tool] || tool}
+                      {TOOL_ICONS[tool] || '🔧'} {toolLabels[tool] || tool}
                     </span>
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.3rem', textAlign: m.role === 'user' ? 'right' : 'left' }}>
+              <div style={{ fontSize: '0.68rem', color: m.role === 'user' ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)', marginTop: '0.3rem', textAlign: m.role === 'user' ? 'right' : 'left' }}>
                 {m.timestamp}
               </div>
+              
+              {/* Inline Farm Viewer if layoutData exists */}
+              {m.layoutData && (
+                <div style={{ marginTop: '1rem', width: '100%', height: 350, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, padding: '0.4rem 0.8rem', background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)', color: '#fff', fontSize: '0.75rem', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{t.layout}</span>
+                    <span style={{ opacity: 0.7 }}>{t.drag}</span>
+                  </div>
+                  {/* @ts-ignore - Dynamic import to avoid SSR issues with ThreeJS */}
+                  <FarmViewer3D result={m.layoutData} />
+                </div>
+              )}
             </div>
             {m.role === 'user' && (
               <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
@@ -324,7 +403,7 @@ export default function AgentChatPage() {
             </div>
             <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: '18px 18px 18px 4px', padding: '0.9rem 1.1rem', maxWidth: '75%' }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a78bfa', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>
-                ⚡ AGENTIC AI WORKING...
+                {t.working}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 {thinkingSteps.map((step, i) => (
@@ -340,11 +419,10 @@ export default function AgentChatPage() {
           </div>
         )}
 
-        {/* Simple typing indicator when loading but no steps yet */}
         {loading && thinkingSteps.length === 0 && (
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, #7c3aed, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', animation: 'agent-pulse 1.5s ease-in-out infinite' }}>🌱</div>
-            <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '18px 18px 18px 4px', padding: '0.75rem 1.25rem', display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <div style={{ background: 'var(--bg-2)', border: '1px solid var(--glass-border)', borderRadius: '18px 18px 18px 4px', padding: '0.75rem 1.25rem', display: 'flex', gap: '5px', alignItems: 'center' }}>
               {[0, 1, 2].map((n) => (
                 <div key={n} style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green-400)', animation: 'bounce 1.2s infinite', animationDelay: `${n * 0.2}s` }} />
               ))}
@@ -354,34 +432,6 @@ export default function AgentChatPage() {
 
         <div ref={bottomRef} />
       </div>
-
-      {/* Quick prompts */}
-      {showQuickPrompts && (
-        <div style={{ flexShrink: 0, marginBottom: '0.75rem' }}>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 700, letterSpacing: '0.06em' }}>⚡ QUICK QUESTIONS</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem' }}>
-            {QUICK_PROMPTS.map((q) => (
-              <button
-                key={q.label}
-                onClick={() => sendMessage(q.text)}
-                disabled={loading}
-                style={{
-                  background: `${q.color}0d`,
-                  border: `1px solid ${q.color}30`,
-                  borderRadius: 10, padding: '0.6rem 0.75rem',
-                  color: 'var(--text)', cursor: 'pointer',
-                  textAlign: 'left', fontSize: '0.8rem', fontWeight: 500,
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  transition: 'all 0.15s', minHeight: 44,
-                }}
-              >
-                <q.Icon size={16} color={q.color} />
-                <span>{q.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Dictation Modal */}
       {dictating && (
@@ -397,8 +447,8 @@ export default function AgentChatPage() {
             <MicIcon size={44} color="#fff" />
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', marginBottom: '0.3rem' }}>Listening…</div>
-            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)' }}>Tap anywhere to cancel</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', marginBottom: '0.3rem' }}>{t.listen}</div>
+            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)' }}>{t.cancel}</div>
           </div>
           {liveTranscript && (
             <div style={{ background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(74,222,128,0.35)', borderRadius: 14, padding: '0.85rem 1.25rem', maxWidth: '80vw', textAlign: 'center', fontSize: '1rem', color: '#86efac', lineHeight: 1.5 }}>
@@ -419,7 +469,7 @@ export default function AgentChatPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imagePreview} alt="attached" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
           <div style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <span style={{ color: '#a78bfa', fontWeight: 700 }}>Image attached</span> — AI will use Gemini Vision to analyse this photo
+            <span style={{ color: '#a78bfa', fontWeight: 700 }}>{t.imgAttached}</span> — {t.imgAi}
           </div>
           <button onClick={clearImage} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '0 0.25rem', display: 'flex' }} title="Remove image">
             <CheckIcon size={16} color="#f87171" />
@@ -460,7 +510,7 @@ export default function AgentChatPage() {
         )}
 
         <input className="form-control" value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder={imagePreview ? 'Describe the photo…' : 'Ask anything about your farm…'}
+          placeholder={imagePreview ? t.descPhoto : t.ask}
           disabled={loading} style={{ flex: 1, borderRadius: 999, paddingLeft: '1.25rem' }} autoFocus />
 
         <button className="btn" type="submit" disabled={loading || (!input.trim() && !imagePreview)}
@@ -468,6 +518,42 @@ export default function AgentChatPage() {
           {loading ? <span className="spinner" /> : <SendIcon size={18} color="#fff" />}
         </button>
       </form>
+    </div>
+
+    {/* Sidebar Column */}
+    {showQuickPrompts && (
+      <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="card fade-in" style={{ padding: '1.25rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <p style={{ fontSize: '0.75rem', color: '#a78bfa', marginBottom: '1rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {t.quick}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {QUICK_PROMPTS.map((q) => (
+              <button
+                key={q.label}
+                onClick={() => setInput(q.text)}
+                disabled={loading}
+                style={{
+                  background: `${q.color}08`,
+                  border: `1px solid ${q.color}25`,
+                  borderRadius: 12, padding: '0.75rem',
+                  color: 'var(--text)', cursor: 'pointer',
+                  textAlign: 'left', fontSize: '0.82rem', fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: '0.65rem',
+                  transition: 'all 0.15s',
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.background = `${q.color}15`; e.currentTarget.style.borderColor = `${q.color}40`; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = `${q.color}08`; e.currentTarget.style.borderColor = `${q.color}25`; }}
+              >
+                <q.Icon size={18} color={q.color} />
+                <span>{q.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
 
       <style>{`
         @keyframes bounce {

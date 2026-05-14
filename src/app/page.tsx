@@ -8,12 +8,12 @@ import {
 } from '@/components/Icons';
 
 const features = [
-  { Icon: CropIcon,    color: '#4ade80', title: 'AI Crop Recommendations', desc: 'Get AI crop suggestions tailored to your soil, water, and season.', href: '/recommendation' },
-  { Icon: DiseaseIcon, color: '#f87171', title: 'Disease Diagnosis',        desc: 'Upload a leaf photo for instant AI-powered plant disease analysis.', href: '/disease' },
-  { Icon: SpatialIcon, color: '#60a5fa', title: 'Spatial Twin',             desc: 'Draw your real field on satellite, then simulate digital twin layouts.', href: '/spatial-planner' },
-  { Icon: PlanIcon,    color: '#a78bfa', title: 'Crop Planning',            desc: 'Complete lifecycle plans: sowing, irrigation, fertilizer, and harvest.', href: '/plan' },
-  { Icon: ChatIcon,    color: '#34d399', title: 'Agentic AI Chat',          desc: 'Farming assistant that uses 8+ tools to answer any question.', href: '/agent-chat' },
-  { Icon: FileIcon,    color: '#fbbf24', title: 'File Manager',             desc: 'Upload, manage, and download files stored in FluxBase cloud.', href: '/files' },
+  { Icon: CropIcon, color: '#4ade80', title: 'AI Crop Recommendations', desc: 'Get AI crop suggestions tailored to your soil, water, and season.', href: '/recommendation' },
+  { Icon: DiseaseIcon, color: '#f87171', title: 'Disease Diagnosis', desc: 'Upload a leaf photo for instant AI-powered plant disease analysis.', href: '/disease' },
+  { Icon: SpatialIcon, color: '#60a5fa', title: 'Spatial Twin', desc: 'Draw your real field on satellite, then simulate digital twin layouts.', href: '/spatial-planner' },
+  { Icon: PlanIcon, color: '#a78bfa', title: 'Crop Planning', desc: 'Complete lifecycle plans: sowing, irrigation, fertilizer, and harvest.', href: '/plan' },
+  { Icon: ChatIcon, color: '#34d399', title: 'Agentic AI Chat', desc: 'Farming assistant that uses 8+ tools to answer any question.', href: '/agent-chat' },
+  { Icon: FileIcon, color: '#fbbf24', title: 'File Manager', desc: 'Upload, manage, and download files stored in FluxBase cloud.', href: '/files' },
 ];
 
 export default async function Home() {
@@ -41,7 +41,7 @@ export default async function Home() {
         {!loggedIn && (
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/signup" className="btn btn-primary" style={{ fontSize: '1rem', padding: '0.9rem 2rem' }}>Get Started Free</Link>
-            <Link href="/login"  className="btn btn-secondary" style={{ fontSize: '1rem', padding: '0.9rem 2rem' }}>Login</Link>
+            <Link href="/login" className="btn btn-secondary" style={{ fontSize: '1rem', padding: '0.9rem 2rem' }}>Login</Link>
           </div>
         )}
       </div>
@@ -55,27 +55,27 @@ export default async function Home() {
           <div className="ticker-wrap" style={{ flex: 1 }}>
             <div className="ticker-inner">
               {[
-                { name: 'Wheat',    price: '₹2,275/q', change: '+1.2%', up: true },
-                { name: 'Rice',     price: '₹3,900/q', change: '+0.8%', up: true },
-                { name: 'Tomato',   price: '₹1,450/q', change: '-3.5%', up: false },
-                { name: 'Onion',    price: '₹980/q',   change: '+2.1%', up: true },
-                { name: 'Soybean',  price: '₹4,200/q', change: '+0.5%', up: true },
-                { name: 'Maize',    price: '₹1,820/q', change: '-1.0%', up: false },
-                { name: 'Cotton',   price: '₹6,500/q', change: '+1.8%', up: true },
-                { name: 'Groundnut',price: '₹5,150/q', change: '+0.3%', up: true },
-                { name: 'Mustard',  price: '₹5,450/q', change: '-0.7%', up: false },
-                { name: 'Sugarcane',price: '₹315/q',   change: '0.0%',  up: true },
+                { name: 'Wheat', price: '₹2,275/q', change: '+1.2%', up: true },
+                { name: 'Rice', price: '₹3,900/q', change: '+0.8%', up: true },
+                { name: 'Tomato', price: '₹1,450/q', change: '-3.5%', up: false },
+                { name: 'Onion', price: '₹980/q', change: '+2.1%', up: true },
+                { name: 'Soybean', price: '₹4,200/q', change: '+0.5%', up: true },
+                { name: 'Maize', price: '₹1,820/q', change: '-1.0%', up: false },
+                { name: 'Cotton', price: '₹6,500/q', change: '+1.8%', up: true },
+                { name: 'Groundnut', price: '₹5,150/q', change: '+0.3%', up: true },
+                { name: 'Mustard', price: '₹5,450/q', change: '-0.7%', up: false },
+                { name: 'Sugarcane', price: '₹315/q', change: '0.0%', up: true },
                 // Duplicate for seamless loop
-                { name: 'Wheat',    price: '₹2,275/q', change: '+1.2%', up: true },
-                { name: 'Rice',     price: '₹3,900/q', change: '+0.8%', up: true },
-                { name: 'Tomato',   price: '₹1,450/q', change: '-3.5%', up: false },
-                { name: 'Onion',    price: '₹980/q',   change: '+2.1%', up: true },
-                { name: 'Soybean',  price: '₹4,200/q', change: '+0.5%', up: true },
-                { name: 'Maize',    price: '₹1,820/q', change: '-1.0%', up: false },
-                { name: 'Cotton',   price: '₹6,500/q', change: '+1.8%', up: true },
-                { name: 'Groundnut',price: '₹5,150/q', change: '+0.3%', up: true },
-                { name: 'Mustard',  price: '₹5,450/q', change: '-0.7%', up: false },
-                { name: 'Sugarcane',price: '₹315/q',   change: '0.0%',  up: true },
+                { name: 'Wheat', price: '₹2,275/q', change: '+1.2%', up: true },
+                { name: 'Rice', price: '₹3,900/q', change: '+0.8%', up: true },
+                { name: 'Tomato', price: '₹1,450/q', change: '-3.5%', up: false },
+                { name: 'Onion', price: '₹980/q', change: '+2.1%', up: true },
+                { name: 'Soybean', price: '₹4,200/q', change: '+0.5%', up: true },
+                { name: 'Maize', price: '₹1,820/q', change: '-1.0%', up: false },
+                { name: 'Cotton', price: '₹6,500/q', change: '+1.8%', up: true },
+                { name: 'Groundnut', price: '₹5,150/q', change: '+0.3%', up: true },
+                { name: 'Mustard', price: '₹5,450/q', change: '-0.7%', up: false },
+                { name: 'Sugarcane', price: '₹315/q', change: '0.0%', up: true },
               ].map((item, i) => (
                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', padding: '0 1rem', borderRight: '1px solid rgba(74,222,128,0.12)', whiteSpace: 'nowrap' }}>
                   <span style={{ fontWeight: 600 }}>{item.name}</span>
@@ -151,9 +151,9 @@ export default async function Home() {
       {!loggedIn && (
         <div className="card-grid" style={{ marginTop: '3rem', textAlign: 'center' }}>
           {[
-            { Icon: ZapIcon,  val: '15+', label: 'AI Agents', color: '#a78bfa' },
-            { Icon: BrainIcon, val: '∞',   label: 'Memory',    color: '#34d399' },
-            { Icon: LeafIcon, val: '100%', label: 'Free',      color: '#4ade80' },
+            { Icon: ZapIcon, val: '15+', label: 'AI Agents', color: '#a78bfa' },
+            { Icon: BrainIcon, val: '∞', label: 'Memory', color: '#34d399' },
+            { Icon: LeafIcon, val: '100%', label: 'Free', color: '#4ade80' },
           ].map(({ Icon, val, label, color }) => (
             <div key={label} style={{ padding: '1.5rem 1rem' }}>
               <Icon size={28} color={color} style={{ margin: '0 auto 0.5rem', display: 'block' }} />

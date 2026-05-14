@@ -7,6 +7,7 @@ import { formatMemory } from '@/lib/agents/context';
 import { runDiseaseAgent } from '@/lib/agents/disease-agent';
 import { runRecommendationAgent } from '@/lib/agents/recommendation-agent';
 import { runReportAgent } from '@/lib/agents/report-agent';
+import { runSpatialAgent } from '@/lib/agents/spatial-agent';
 import type { AgentContext } from '@/lib/agents/types';
 import type { FarmToolName } from './registry';
 
@@ -36,7 +37,8 @@ export async function executeTool(
   toolName: FarmToolName,
   toolArgs: Record<string, string>,
   ctx: AgentContext,
-  onThinking?: (msg: string) => void
+  onThinking?: (msg: string) => void,
+  onToolData?: (data: any) => void
 ): Promise<string> {
   const emit = (msg: string) => onThinking?.(msg);
 
@@ -106,13 +108,23 @@ export async function executeTool(
         cropType: toolArgs.crop_type || 'Unknown',
         imageBase64: ctxWithImage.imageBase64,
       });
-      if (!result.success || !result.data) return 'Disease diagnosis failed. Please describe symptoms more clearly.';
-      const { diagnosis, confidence, treatment, prevention } = result.data;
+      if (!result.success || !result.data) {
+        return `Disease diagnosis failed: ${result.error || 'Unknown error'}. Do not retry this tool. Ask the user for more details if needed.`;
+      }
+      const { diagnosis, confidence, treatment, prevention, products } = result.data;
+      
+      let productsText = '';
+      if (products && products.length > 0) {
+        productsText = `\n\nCRITICAL INSTRUCTION: You MUST copy and paste the following "Recommended Products" section EXACTLY as written at the end of your response:\n\n### Recommended Products\n` + products.map(p => 
+          `- **${p.name}** (${p.type}, Dose: ${p.dose}) \n  🛒 [Buy on Amazon](https://www.amazon.in/s?k=${encodeURIComponent(p.searchQuery)})`
+        ).join('\n\n');
+      }
+
       return `Disease Diagnosis:
 - Disease: ${diagnosis}
 - Confidence: ${confidence}
 - Treatment: ${treatment}
-- Prevention: ${prevention}`;
+- Prevention: ${prevention}${productsText}`;
     }
 
     // ── 5. Agent Memory (cross-session history) ────────────────────────
@@ -147,7 +159,11 @@ export async function executeTool(
         }
       }).filter(Boolean).join('\n');
 
-      return `Cross-Session Memory (recent conversations):\n${formatted || 'No detailed history available.'}`;
+      if (!formatted) {
+        return "System Notification: The farmer has no past conversation history. Memory is completely empty.";
+      }
+
+      return `Cross-Session Memory (recent conversations):\n${formatted}`;
     }
 
     // ── 6. Full Crop Report ────────────────────────────────
@@ -179,6 +195,73 @@ export async function executeTool(
         [ctx.farmerId, JSON.stringify({ agent: 'reminder', summary: toolArgs.reminder, timestamp: new Date().toISOString() })]
       );
       return `✅ Reminder saved: "${toolArgs.reminder}"`;
+    }
+
+    // ── 9. Weather Forecast ────────────────────────────────
+    case 'get_weather_forecast': {
+      emit(`☁️ Checking weather for ${toolArgs.location}...`);
+      const apiKey = process.env.OPENWEATHER_API_KEY;
+      if (!apiKey) return 'Weather data is currently unavailable (missing API key).';
+      if (!toolArgs.location) return 'Please specify a location to get the weather.';
+      
+      try {
+        const res = await fetch(
+          `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(toolArgs.location)}&appid=${apiKey}&units=metric`
+        );
+        if (!res.ok) {
+          if (res.status === 404) return `Could not find weather data for "${toolArgs.location}". Please check the spelling.`;
+          throw new Error('Weather API failed');
+        }
+        const data = await res.json();
+        const temp = data.main?.temp;
+        const humidity = data.main?.humidity;
+        const description = data.weather?.[0]?.description || 'unknown';
+        const wind = data.wind?.speed;
+        
+        return `Current weather in ${data.name || toolArgs.location}:
+- Temperature: ${temp}°C
+- Condition: ${description}
+- Humidity: ${humidity}%
+- Wind Speed: ${wind} m/s
+Use this data to advise the farmer on irrigation or sowing timing.`;
+      } catch (err) {
+        return 'Failed to fetch weather data. Please try again later.';
+      }
+    }
+
+    // ── 10. Spatial Twin ───────────────────────────────────
+    case 'generate_spatial_twin': {
+      emit('🗺️ Generating 3D Spatial Twin and detailed layout plan...');
+      const mode = toolArgs.layout_mode || 'strip';
+      const landSizeStr = toolArgs.land_size || ctx.farmerProfile?.land_size?.toString();
+      const landSize = parseFloat(landSizeStr || '2.0');
+      
+      const result = await runSpatialAgent(ctx, { mode, landSize });
+      if (!result.success || !result.data) {
+        return 'Failed to generate Spatial Twin layout.';
+      }
+      
+      const { crop_stats, insights, main_crop } = result.data;
+      const cropDetails = crop_stats.map(c => `- ${c.name}: ${c.yield_t_per_acre} t/acre (Spacing: ${c.spacing}cm)`).join('\n');
+      
+      // Emit the raw JSON layout data for the frontend UI to render 3D
+      if (onToolData) {
+        onToolData({ type: 'spatial_twin', layoutData: result.data });
+      }
+
+      return `Spatial Twin generated successfully!
+Layout Mode: ${mode}
+Land Size: ${landSize} acres
+Main Crop: ${main_crop}
+
+Expected Yield Profile:
+${cropDetails}
+Total Multi-crop Yield: ${insights.total_yield}t
+Yield Boost vs Monoculture: +${insights.yield_boost_pct}%
+Land Efficiency: ${insights.land_efficiency_pct}%
+
+Please tell the farmer to visit the "Spatial Twin" tab in the dashboard to view the full 3D interactive simulation.
+`;
     }
 
     default:

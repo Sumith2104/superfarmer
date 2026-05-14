@@ -57,6 +57,22 @@ export async function logAgentAction(params: {
         [farmerId]
       );
     }
+    // Ensure table exists with all columns
+    await dbExecute(
+      `CREATE TABLE IF NOT EXISTS agent_memory (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        farmer_id INT,
+        agent VARCHAR(64),
+        action_type VARCHAR(64),
+        input_text TEXT,
+        output_text TEXT,
+        tools_used JSON,
+        metadata JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+      []
+    ).catch(() => {});
+
     await dbExecute(
       `INSERT INTO agent_memory
         (farmer_id, agent, action_type, input_text, output_text, tools_used, metadata)

@@ -2,7 +2,7 @@
 // DiseaseDiagnosisAgent — handles plant disease identification via vision or text symptoms
 
 import { getVisionModel, withTimeout } from '@/lib/gemini';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import type { AgentContext, AgentResult } from './types';
 
 export interface DiseaseProduct {
@@ -57,7 +57,15 @@ export async function runDiseaseAgent(
     trace.push(`Step 2 ✓: Diagnosis complete: ${data.diagnosis}`);
 
     if (farmerId) {
-      void saveMemory(farmerId, 'disease', `Diagnosed ${data.diagnosis} on ${input.cropType || 'plant'}. Confidence: ${data.confidence}`);
+      void logAgentAction({
+        farmerId,
+        agent: 'disease',
+        actionType: 'diagnosis',
+        input: `Crop: ${input.cropType || 'Unknown'} | Symptoms: ${input.textSymptoms || 'None'} | Image provided: ${!!input.imageBase64}`,
+        output: `Diagnosis: ${data.diagnosis} (${data.confidence}). Treatment: ${data.treatment}`,
+        toolsUsed: ['gemini-vision-ai'],
+        metadata: { diagnosis: data.diagnosis, confidence: data.confidence, crop: input.cropType },
+      });
     }
 
     return { success: true, data, trace };

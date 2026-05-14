@@ -119,6 +119,44 @@ export const FARM_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_weather_forecast',
+      description: "Get the current weather and forecast for a specific location. Use this when the farmer asks about the weather, irrigation timing, or sowing conditions.",
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'The city or village name (e.g. Pune, Nashik, Bhopal). Infer from farmer profile if not provided.',
+          },
+        },
+        required: ['location'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_spatial_twin',
+      description: "Generate a 3D Spatial Twin and detailed hexagonal planting layout for the farmer's land. This provides crop positioning, marigold border defense logic, and yield estimates. Use this when the farmer asks to 'make a plan detailed', 'show me the layout', or 'generate a spatial twin'.",
+      parameters: {
+        type: 'object',
+        properties: {
+          layout_mode: {
+            type: 'string',
+            description: 'The planting layout mode: "strip", "row", or "grid". If unspecified, default to "strip".',
+          },
+          land_size: {
+            type: 'number',
+            description: 'Size of the land in acres. If not provided, the tool will attempt to use the land size from the farmer profile.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 // Tool name type for exhaustive type-checking in executor
@@ -130,4 +168,6 @@ export type FarmToolName =
   | 'get_agent_memory'
   | 'generate_crop_report'
   | 'get_mandi_prices'
-  | 'save_reminder';
+  | 'save_reminder'
+  | 'get_weather_forecast'
+  | 'generate_spatial_twin';

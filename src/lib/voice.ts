@@ -108,12 +108,16 @@ export function stopListening(sr: SR | null): void {
 /** Map farmer language code to BCP-47 speech lang code */
 export function getLangCode(preferred: string): string {
   const MAP: Record<string, string> = {
-    hi: 'hi-IN',
-    mr: 'mr-IN',
-    te: 'te-IN',
-    kn: 'kn-IN',
-    ta: 'ta-IN',
-    en: 'en-IN',
+    hi: 'hi-IN',   // Hindi
+    kn: 'kn-IN',   // Kannada
+    ta: 'ta-IN',   // Tamil
+    te: 'te-IN',   // Telugu
+    ml: 'ml-IN',   // Malayalam
+    mr: 'mr-IN',   // Marathi
+    gu: 'gu-IN',   // Gujarati
+    pa: 'pa-IN',   // Punjabi
+    or: 'or-IN',   // Odia
+    en: 'en-IN',   // English
   };
   return MAP[preferred] ?? 'en-IN';
 }

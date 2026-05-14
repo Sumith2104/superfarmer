@@ -38,11 +38,17 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [userLang, setUserLang] = useState('en');
 
   const AGENTS = ['all', 'chat', 'recommendation', 'disease', 'plan', 'weather', 'nutrient', 'spatial', 'report'];
 
   useEffect(() => {
+    // Load preferred language from profile
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      if (d.profile?.preferred_lang) setUserLang(d.profile.preferred_lang);
+    }).catch(() => {});
     loadMemory();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   async function loadMemory() {
@@ -65,7 +71,7 @@ export default function MemoryPage() {
   }
 
   function handleSpeak(entry: MemoryEntry) {
-    speak(`${AGENT_LABELS[entry.agent] ?? entry.agent} said: ${entry.output_text}`, getLangCode('en'));
+    speak(`${AGENT_LABELS[entry.agent] ?? entry.agent} said: ${entry.output_text}`, getLangCode(userLang));
   }
 
   const grouped = groupByDate(entries);

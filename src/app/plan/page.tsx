@@ -68,8 +68,8 @@ export default function PlanPage() {
         <div className="fade-in">
           <div className="card" style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--green-400)' }}>Plan: {plan.crop_name}</h2>
-              <span style={{ background: 'rgba(22,163,74,0.15)', color: 'var(--green-400)', border: '1px solid rgba(74,222,128,0.3)', padding: '0.3rem 0.8rem', borderRadius: 999, fontSize: '0.8rem', fontWeight: 700 }}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--green-600)' }}>Plan: {plan.crop_name}</h2>
+              <span style={{ background: 'rgba(22,163,74,0.15)', color: 'var(--green-600)', border: '1px solid rgba(74,222,128,0.3)', padding: '0.3rem 0.8rem', borderRadius: 999, fontSize: '0.8rem', fontWeight: 700 }}>
                 {plan.status || 'Active'}
               </span>
             </div>
@@ -81,14 +81,14 @@ export default function PlanPage() {
                 { icon: '🧪', label: 'Fertilizer Schedule', value: plan.fertilizer_schedule },
                 { icon: '🌾', label: 'Harvest Timeline', value: plan.harvest_timeline },
               ].map((item) => (
-                <div key={item.label} style={{ background: 'rgba(15,26,18,0.6)', padding: '1rem', borderRadius: 10, border: '1px solid var(--glass-border)' }}>
+                <div key={item.label} style={{ background: 'rgba(0,0,0,0.03)', padding: '1rem', borderRadius: 10, border: '1px solid var(--glass-border)' }}>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>{item.icon} {item.label}</div>
                   <div style={{ fontSize: '0.92rem', lineHeight: 1.5 }}>{item.value}</div>
                 </div>
               ))}
               <div style={{ gridColumn: '1/-1', background: 'rgba(239,68,68,0.08)', padding: '1rem', borderRadius: 10, border: '1px solid rgba(239,68,68,0.2)' }}>
-                <div style={{ fontSize: '0.75rem', color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>🐛 Pest Alerts</div>
-                <div style={{ fontSize: '0.92rem', color: '#fca5a5', lineHeight: 1.5 }}>{plan.pest_alerts}</div>
+                <div style={{ fontSize: '0.75rem', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>🐛 Pest Alerts</div>
+                <div style={{ fontSize: '0.92rem', color: '#dc2626', lineHeight: 1.5 }}>{plan.pest_alerts}</div>
               </div>
             </div>
           </div>

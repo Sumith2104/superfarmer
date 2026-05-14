@@ -158,14 +158,14 @@ export function getJsonModel(
   systemInstruction: string,
   options: { temperature?: number; maxTokens?: number; modelName?: string } = {}
 ) {
-  const { modelName = 'gemini-2.0-flash-lite' } = options;
+  const { modelName = 'gemini-2.5-flash' } = options;
   return new HybridModel(systemInstruction, false, true, modelName, 'llama-3.1-8b-instant');
 }
 
 export function getVisionModel(systemInstruction: string) {
-  return new HybridModel(systemInstruction, true, true, 'gemini-2.0-flash-lite', 'llama-3.1-8b-instant');
+  return new HybridModel(systemInstruction, true, true, 'gemini-2.5-flash', 'llama-3.1-8b-instant');
 }
 
-export function getGeminiModel(modelName = 'gemini-2.0-flash-lite') {
+export function getGeminiModel(modelName = 'gemini-2.5-flash') {
   return new HybridModel('', false, false, modelName, 'llama-3.1-8b-instant');
 }

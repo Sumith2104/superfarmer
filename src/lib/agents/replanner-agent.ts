@@ -4,7 +4,7 @@
 
 import { getJsonModel, withTimeout } from '@/lib/gemini';
 import { dbExecute } from '@/lib/fluxbase';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import type { AgentContext, AgentResult } from './types';
 
 export interface ReplannerData {
@@ -106,11 +106,15 @@ Generate an emergency replanning response:
 
   // ── Step 4: Save memory ──
   if (farmerId) {
-    void saveMemory(
+    void logAgentAction({
       farmerId,
-      'replanner',
-      `HIGH risk triggered emergency replan for ${cropName}. Risk: ${riskData.risk_probability}%. Actions: ${replan.emergency_actions[0]}`
-    );
+      agent: 'replanner',
+      actionType: 'emergency_replan',
+      input: `Crop: ${cropName} | Risk: ${riskData.risk_probability}% | N:${riskData.n} P:${riskData.p} K:${riskData.k}`,
+      output: `Emergency Actions: ${replan.emergency_actions.join(', ')}`,
+      toolsUsed: ['gemini-ai', 'auto-trigger'],
+      metadata: { plan_id: currentPlan.plan_id, risk_probability: riskData.risk_probability, actions: replan.emergency_actions },
+    });
 
     // Log to nutrient_risk_log
     void dbExecute(

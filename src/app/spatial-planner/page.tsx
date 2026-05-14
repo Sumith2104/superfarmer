@@ -1,18 +1,25 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
+const FarmViewer3D = lazy(() => import('@/components/FarmViewer3D'));
 
 // ── Types ─────────────────────────────────────────────────
 interface PlantNode { x: number; y: number; type: string; color: string; radius: number; }
 interface ZoneData  { x: number; y: number; w: number; h: number; crop: string; color: string; label: string; }
+interface ZoneYield { crop: string; acres: number; yield_t: number; }
 interface Insights  {
-  total_plants: number; land_efficiency: number; water_saving_pct: number;
-  yield_boost_pct: number; nitrogen_balance: string; best_combo: string;
+  total_plants: number; interior_plants?: number; border_plants?: number;
+  land_efficiency: number; water_saving_pct: number;
+  yield_boost_pct: number; layout_score?: number;
+  nitrogen_balance: string; best_combo: string; sunlight_note?: string;
+  zone_yields?: ZoneYield[]; total_yield?: number;
   warnings: string[]; action_items: string[];
 }
 interface CropStat { name: string; color: string; emoji: string; water: string; nitrogen: string; profit_score: number; yield_t_per_acre: number; companion_score: number; }
 interface LayoutResult {
   layout: PlantNode[]; zones: ZoneData[]; analysis: string;
   main_crop: string; companion: string; insights: Insights; crop_stats: CropStat[];
+  memory_log?: string[]; override_crop?: string | null; override_reason?: string | null;
+  prev_crop?: string | null; soil_impact?: string; layout_mode?: string;
 }
 // Normalized polygon: each point in [0..1] x [0..1] space
 type NormPoly = { x: number; y: number }[];
@@ -147,100 +154,279 @@ function draw2D(canvas: HTMLCanvasElement, data: LayoutResult, poly: NormPoly | 
   }
 }
 
-// ── 3D Isometric (polygon-aware, draggable, zoomable) ─────
+// ── Next-Level 3D Isometric Engine ────────────────────────
 function draw3D(
   canvas: HTMLCanvasElement,
   data: LayoutResult,
   cam: { x: number; y: number; zoom: number },
   hovered: PlantNode | null,
-  poly: NormPoly | null
+  poly: NormPoly | null,
+  time: number = 0
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#0d1f0e');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-  const tileW = 48 * cam.zoom, tileH = 24 * cam.zoom;
-  const cols = 20, rows = 20;
-  const originX = W / 2 + cam.x, originY = H * 0.35 + cam.y;
+  // ── Deep space background ──
+  const bg = ctx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.5, W * 0.85);
+  bg.addColorStop(0, '#0f1f3a');
+  bg.addColorStop(0.5, '#080f1c');
+  bg.addColorStop(1, '#030608');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
 
-  function toIso(c: number, r: number): [number, number] {
-    return [originX + (c - r) * (tileW / 2), originY + (c + r) * (tileH / 2)];
+  // Distant stars
+  ctx.save();
+  for (let i = 0; i < 80; i++) {
+    const sx = ((i * 173.3 + 11) % W);
+    const sy = ((i * 97.7 + 37) % (H * 0.7));
+    const bright = 0.15 + 0.3 * Math.sin(time * 0.8 + i);
+    ctx.fillStyle = `rgba(180,210,255,${bright})`;
+    ctx.beginPath(); ctx.arc(sx, sy, 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  const tileW = 52 * cam.zoom, tileH = 26 * cam.zoom;
+  const cols = 22, rows = 22;
+  const TERRAIN_DEPTH = 28 * cam.zoom; // height of the floating island sides
+  const originX = W / 2 + cam.x;
+  const originY = H * 0.30 + cam.y;
+
+  function toIso(c: number, r: number, elevate = 0): [number, number] {
+    return [
+      originX + (c - r) * (tileW / 2),
+      originY + (c + r) * (tileH / 2) - elevate,
+    ];
   }
 
-  // Ground tiles — dim outside polygon
+  // ── Shadow blob beneath floating island ──
+  ctx.save();
+  const shadowCx = originX + (cols / 2 - rows / 2) * (tileW / 2);
+  const shadowCy = originY + (cols / 2 + rows / 2) * (tileH / 2) + TERRAIN_DEPTH + 30;
+  const shadowRx = cols * tileW * 0.38;
+  const shadowRy = shadowRx * 0.22;
+  const shadowG = ctx.createRadialGradient(shadowCx, shadowCy, 0, shadowCx, shadowCy, shadowRx);
+  shadowG.addColorStop(0, 'rgba(0,0,0,0.45)');
+  shadowG.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowG;
+  ctx.beginPath(); ctx.ellipse(shadowCx, shadowCy, shadowRx, shadowRy, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // ── Precompute zone color per tile ──
+  function getTileZoneColor(normX: number): string {
+    const zone = data.zones.find((z) => normX * W >= z.x && normX * W < z.x + z.w);
+    return zone ? zone.color : '#22c55e';
+  }
+
+  // ── Zone height variation (terracing) ──
+  function getZoneElevation(normX: number): number {
+    const zone = data.zones.find((z) => normX * W >= z.x && normX * W < z.x + z.w);
+    if (!zone) return 0;
+    const idx = data.zones.indexOf(zone);
+    return (idx % 3) * 6 * cam.zoom;
+  }
+
+  // ── Draw floating terrain SIDES (back rows/cols first for z-order) ──
+  // Right face (visible right side of island)
+  for (let r = 0; r < rows; r++) {
+    const c = cols - 1;
+    const normX = c / cols;
+    const inField = !poly || poly.length < 3 || pointInPoly(normX, r / rows, poly);
+    if (!inField) continue;
+    const elev = getZoneElevation(normX);
+    const [sx, sy] = toIso(c, r, elev);
+    const zc = getTileZoneColor(normX);
+    // Right side face
+    ctx.beginPath();
+    ctx.moveTo(sx + tileW / 2, sy + tileH / 2);
+    ctx.lineTo(sx, sy + tileH);
+    ctx.lineTo(sx, sy + tileH + TERRAIN_DEPTH);
+    ctx.lineTo(sx + tileW / 2, sy + tileH / 2 + TERRAIN_DEPTH);
+    ctx.closePath();
+    const rf = ctx.createLinearGradient(sx, sy, sx, sy + TERRAIN_DEPTH);
+    rf.addColorStop(0, zc + '30'); rf.addColorStop(1, '#5c3a1e88');
+    ctx.fillStyle = rf; ctx.fill();
+  }
+  // Left face
+  for (let c = 0; c < cols; c++) {
+    const r = rows - 1;
+    const normX = c / cols;
+    const inField = !poly || poly.length < 3 || pointInPoly(normX, r / rows, poly);
+    if (!inField) continue;
+    const elev = getZoneElevation(normX);
+    const [sx, sy] = toIso(c, r, elev);
+    const zc = getTileZoneColor(normX);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + tileH);
+    ctx.lineTo(sx - tileW / 2, sy + tileH / 2);
+    ctx.lineTo(sx - tileW / 2, sy + tileH / 2 + TERRAIN_DEPTH);
+    ctx.lineTo(sx, sy + tileH + TERRAIN_DEPTH);
+    ctx.closePath();
+    const lf = ctx.createLinearGradient(sx, sy, sx, sy + TERRAIN_DEPTH);
+    lf.addColorStop(0, zc + '18'); lf.addColorStop(1, '#3d2510aa');
+    ctx.fillStyle = lf; ctx.fill();
+  }
+
+  // ── Ground surface tiles ──
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const [sx, sy] = toIso(c, r);
-      if (sx < -100 || sx > W + 100 || sy < -100 || sy > H + 100) continue;
       const normX = c / cols, normY = r / rows;
+      const [sx, sy] = toIso(c, r, getZoneElevation(normX));
+      if (sx < -120 || sx > W + 120 || sy < -120 || sy > H + 120) continue;
       const inField = !poly || poly.length < 3 || pointInPoly(normX, normY, poly);
-      const zone = data.zones.find((z) => normX * canvas.width >= z.x && normX * canvas.width < z.x + z.w);
-      const zColor = zone ? zone.color : '#22c55e';
+      const zColor = getTileZoneColor(normX);
+
+      // Diamond tile top
       ctx.beginPath();
-      ctx.moveTo(sx, sy); ctx.lineTo(sx + tileW / 2, sy + tileH / 2);
-      ctx.lineTo(sx, sy + tileH); ctx.lineTo(sx - tileW / 2, sy + tileH / 2); ctx.closePath();
-      ctx.fillStyle = inField ? zColor + '22' : 'rgba(0,0,0,0.12)';
-      ctx.fill();
-      ctx.strokeStyle = inField ? zColor + '28' : 'rgba(255,255,255,0.03)';
-      ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + tileW / 2, sy + tileH / 2);
+      ctx.lineTo(sx, sy + tileH);
+      ctx.lineTo(sx - tileW / 2, sy + tileH / 2);
+      ctx.closePath();
+
+      if (inField) {
+        const tg = ctx.createLinearGradient(sx - tileW / 2, sy, sx + tileW / 2, sy + tileH);
+        tg.addColorStop(0, zColor + '35');
+        tg.addColorStop(1, zColor + '18');
+        ctx.fillStyle = tg;
+        ctx.strokeStyle = zColor + '22';
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.015)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+      }
+      ctx.lineWidth = 0.5;
+      ctx.fill(); ctx.stroke();
+
+      // Glowing water channel every 5 rows
+      if (inField && r % 5 === 2 && c % 2 === 0) {
+        const pulse = 0.25 + 0.12 * Math.sin(time * 1.5 + c * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(sx - tileW * 0.35, sy + tileH * 0.55);
+        ctx.lineTo(sx + tileW * 0.35, sy + tileH * 0.55);
+        ctx.strokeStyle = `rgba(56,189,248,${pulse})`;
+        ctx.lineWidth = 1.5 * cam.zoom;
+        ctx.stroke();
+        // Water shimmer dot
+        const shimX = sx + Math.sin(time * 2 + c) * tileW * 0.15;
+        ctx.beginPath(); ctx.arc(shimX, sy + tileH * 0.55, 1.5 * cam.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(147,230,255,${pulse * 1.4})`; ctx.fill();
+      }
     }
   }
 
-  // Field boundary outline in 3D
+  // ── Field polygon boundary glow ──
   if (poly && poly.length >= 3) {
-    ctx.strokeStyle = '#4ade80aa'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    const glow = 0.55 + 0.25 * Math.sin(time * 1.2);
+    ctx.strokeStyle = `rgba(74,222,128,${glow})`;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([7, 4]);
+    ctx.shadowBlur = 12; ctx.shadowColor = '#4ade80';
     ctx.beginPath();
     poly.forEach((p, i) => {
       const c = Math.floor(p.x * cols), r = Math.floor(p.y * rows);
-      const [sx, sy] = toIso(c, r);
+      const [sx, sy] = toIso(c, r, getZoneElevation(c / cols));
       if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
     });
-    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([]); ctx.shadowBlur = 0;
   }
 
-  // Sort plants for z-order
-  const sorted = [...data.layout].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  // ── Crop voxels (z-sorted) ──
+  const sorted = [...data.layout].sort((a, b) => (a.x / W + a.y / H) - (b.x / W + b.y / H));
+
   sorted.forEach((p) => {
     const nx = p.x / W, ny = p.y / H;
-    if (poly && poly.length >= 3 && !pointInPoly(nx, ny, poly)) return; // skip outside field
+    if (poly && poly.length >= 3 && !pointInPoly(nx, ny, poly)) return;
 
     const c = Math.floor(nx * cols), r = Math.floor(ny * rows);
-    const [sx, sy] = toIso(c, r);
-    if (sx < -100 || sx > W + 100 || sy < -100 || sy > H + 100) return;
+    const elev = getZoneElevation(nx);
+    const [sx, sy] = toIso(c, r, elev);
+    if (sx < -120 || sx > W + 120 || sy < -120 || sy > H + 120) return;
 
     const stat = data.crop_stats?.find((s) => s.name === p.type);
-    const pillarH = Math.max(18, (stat?.yield_t_per_acre || 2) * 8 * cam.zoom);
+    const baseH = Math.max(14, (stat?.yield_t_per_acre || 2) * 9) * cam.zoom;
+    const bob = Math.sin(time * 1.3 + nx * 17 + ny * 13) * 1.8 * cam.zoom; // breathing animation
+    const cropH = baseH + bob;
     const col = p.color;
     const isHov = hovered?.x === p.x && hovered?.y === p.y;
+    const tw2 = tileW * 0.42, th2 = tileH * 0.42;
 
-    ctx.beginPath();
-    ctx.moveTo(sx - tileW / 2, sy + tileH / 2); ctx.lineTo(sx, sy + tileH);
-    ctx.lineTo(sx, sy + tileH + pillarH); ctx.lineTo(sx - tileW / 2, sy + tileH / 2 + pillarH); ctx.closePath();
-    ctx.fillStyle = col + (isHov ? 'aa' : '44'); ctx.fill();
-    if (isHov) { ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); }
+    if (isHov) { ctx.shadowBlur = 18; ctx.shadowColor = col; }
 
+    // Stem / trunk (left dark face)
     ctx.beginPath();
-    ctx.moveTo(sx, sy + tileH); ctx.lineTo(sx + tileW / 2, sy + tileH / 2);
-    ctx.lineTo(sx + tileW / 2, sy + tileH / 2 + pillarH); ctx.lineTo(sx, sy + tileH + pillarH); ctx.closePath();
-    ctx.fillStyle = col + (isHov ? 'cc' : '66'); ctx.fill();
+    ctx.moveTo(sx - tw2, sy + th2);
+    ctx.lineTo(sx, sy + tileH);
+    ctx.lineTo(sx, sy + tileH + cropH);
+    ctx.lineTo(sx - tw2, sy + th2 + cropH);
+    ctx.closePath();
+    ctx.fillStyle = col + (isHov ? 'bb' : '55');
+    ctx.fill();
 
+    // Right face
     ctx.beginPath();
-    ctx.moveTo(sx, sy + pillarH); ctx.lineTo(sx + tileW / 2, sy + tileH / 2 + pillarH);
-    ctx.lineTo(sx, sy + tileH + pillarH); ctx.lineTo(sx - tileW / 2, sy + tileH / 2 + pillarH); ctx.closePath();
-    const tg = ctx.createRadialGradient(sx, sy + pillarH + tileH / 2, 0, sx, sy + pillarH + tileH / 2, tileW / 2);
-    tg.addColorStop(0, col + (isHov ? 'ff' : '99')); tg.addColorStop(1, col + '33');
-    ctx.fillStyle = tg; ctx.fill();
-    ctx.strokeStyle = isHov ? col : col + '44'; ctx.lineWidth = isHov ? 2 : 0.5; ctx.stroke();
+    ctx.moveTo(sx, sy + tileH);
+    ctx.lineTo(sx + tw2, sy + th2);
+    ctx.lineTo(sx + tw2, sy + th2 + cropH);
+    ctx.lineTo(sx, sy + tileH + cropH);
+    ctx.closePath();
+    ctx.fillStyle = col + (isHov ? 'dd' : '77');
+    ctx.fill();
+
+    // Top canopy (gradient diamond)
+    const capOff = cropH * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + capOff);
+    ctx.lineTo(sx + tw2, sy + th2 + capOff);
+    ctx.lineTo(sx, sy + tileH + capOff);
+    ctx.lineTo(sx - tw2, sy + th2 + capOff);
+    ctx.closePath();
+    const cg = ctx.createRadialGradient(sx, sy + th2 + capOff, 0, sx, sy + th2 + capOff, tw2 * 1.1);
+    cg.addColorStop(0, col + (isHov ? 'ff' : 'cc'));
+    cg.addColorStop(0.6, col + (isHov ? 'bb' : '88'));
+    cg.addColorStop(1, col + '22');
+    ctx.fillStyle = cg; ctx.fill();
+    ctx.strokeStyle = isHov ? col : col + '55';
+    ctx.lineWidth = isHov ? 2 : 0.8;
+    ctx.stroke();
+
+    // Glow halo on hover
+    if (isHov) {
+      ctx.beginPath();
+      ctx.arc(sx, sy + capOff + th2 * 0.5, tw2 * 1.3, 0, Math.PI * 2);
+      ctx.strokeStyle = col + '66'; ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
   });
 
-  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = 'bold 12px Inter,sans-serif';
-  ctx.fillText('🗺️ 3D View  |  Drag · Scroll to zoom · Hover to inspect', 14, 22);
-  ctx.font = '11px Inter,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.28)';
-  ctx.fillText(`Zoom: ${(cam.zoom * 100).toFixed(0)}%  Plants: ${data.layout.length}${poly ? '  |  📐 Field shape active' : ''}`, 14, 38);
+  // ── Zone labels floating above terrain ──
+  data.zones.forEach((z) => {
+    const normCx = (z.x + z.w * 0.5) / W;
+    const c = Math.floor(normCx * cols), r = Math.floor(rows * 0.18);
+    const elev = getZoneElevation(normCx) + 22 * cam.zoom;
+    const [lx, ly] = toIso(c, r, elev);
+    ctx.save();
+    ctx.font = `bold ${Math.max(9, 11 * cam.zoom)}px Inter,sans-serif`;
+    ctx.fillStyle = z.color + 'cc';
+    ctx.shadowBlur = 10; ctx.shadowColor = z.color;
+    ctx.fillText(z.label, lx - ctx.measureText(z.label).width / 2, ly);
+    ctx.restore();
+  });
+
+  // ── HUD overlay ──
+  ctx.save();
+  const hudBg = ctx.createRoundRect ? undefined : undefined; void hudBg;
+  ctx.fillStyle = 'rgba(8,18,35,0.7)';
+  ctx.roundRect?.(8, 8, 310, 44, 8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = 'bold 12px Inter,sans-serif';
+  ctx.fillText('🗺️ 3D Isometric  ·  Drag · Scroll to zoom · Hover to inspect', 18, 27);
+  ctx.font = '10.5px Inter,sans-serif'; ctx.fillStyle = 'rgba(56,189,248,0.8)';
+  ctx.fillText(`Zoom ${(cam.zoom * 100).toFixed(0)}%  ·  Plants ${data.layout.length}${poly ? '  ·  📐 Field active' : ''}`, 18, 43);
+  ctx.restore();
 }
 
 // ── Satellite Map with Draw + Save ────────────────────────
@@ -258,6 +444,7 @@ function SatelliteMap({
   const [clearing, setClearing] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [pendingLatlngs, setPendingLatlngs] = useState<[number, number][] | null>(null);
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     if (!mapRef.current || mapInst.current) return;
@@ -373,6 +560,39 @@ function SatelliteMap({
     finally { setClearing(false); }
   }
 
+  function locateMe() {
+    if (!navigator.geolocation) { setSaveMsg('❌ Geolocation not supported by your browser.'); return; }
+    setLocating(true);
+    setSaveMsg('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const map = mapInst.current as any;
+        if (map) {
+          map.setView([latitude, longitude], 16, { animate: true });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const L = (window as any).L;
+          if (L) {
+            // Remove existing locate markers
+            if (map._locateMarker) map.removeLayer(map._locateMarker);
+            map._locateMarker = L.circleMarker([latitude, longitude], {
+              radius: 10, color: '#38bdf8', fillColor: '#38bdf8',
+              fillOpacity: 0.35, weight: 3,
+            }).addTo(map).bindPopup('📍 You are here').openPopup();
+          }
+        }
+        setSaveMsg(`📍 Located at ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        setLocating(false);
+      },
+      (err) => {
+        setSaveMsg(`❌ ${err.message || 'Could not get location.'}`);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   async function saveField() {
     if (!pendingLatlngs || drawnAcres === null) return;
     setSaving(true);
@@ -406,9 +626,17 @@ function SatelliteMap({
       <div ref={mapRef} style={{ width: '100%', height: 460, borderRadius: 12 }} />
       <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.4rem', maxWidth: 230 }}>
 
-        {/* Header */}
-        <div style={{ background: 'rgba(10,22,40,0.92)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#86efac', border: '1px solid rgba(74,222,128,0.25)' }}>
-          🛰️ Satellite — Draw your field
+        {/* Header + Locate Me */}
+        <div style={{ background: 'rgba(10,22,40,0.92)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#86efac', border: '1px solid rgba(74,222,128,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+          <span>🛰️ Satellite — Draw your field</span>
+          <button
+            onClick={locateMe}
+            disabled={locating}
+            title="Center map on your current GPS location"
+            style={{ padding: '0.25rem 0.55rem', borderRadius: 7, background: locating ? 'rgba(56,189,248,0.1)' : 'linear-gradient(135deg,#0ea5e9,#6366f1)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '0.68rem', cursor: locating ? 'wait' : 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.3rem', opacity: locating ? 0.7 : 1, transition: 'all 0.2s' }}
+          >
+            {locating ? '⌛' : '📍'} {locating ? 'Locating...' : 'Locate Me'}
+          </button>
         </div>
 
         {/* Instructions */}
@@ -471,7 +699,9 @@ export default function SpatialPlannerPage() {
   const [mainCrop, setMainCrop] = useState('Corn');
   const [companions, setCompanions] = useState<string[]>(['Soybean', 'Marigold']);
   const [landSize, setLandSize] = useState(2);
+  const [layoutMode, setLayoutMode] = useState('Strip');
   const [viewMode, setViewMode] = useState<ViewMode>('2D Field');
+  const [showMemoryLog, setShowMemoryLog] = useState(false);
   const [result, setResult] = useState<LayoutResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -485,6 +715,8 @@ export default function SpatialPlannerPage() {
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, camX: 0, camY: 0 });
   const hoveredRef = useRef<PlantNode | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: PlantNode } | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const timeRef = useRef(0);
 
   // Load saved boundary on mount
   useEffect(() => {
@@ -501,10 +733,30 @@ export default function SpatialPlannerPage() {
     const canvas = canvasRef.current;
     if (!canvas || !result) return;
     if (viewMode === '2D Field') draw2D(canvas, result, normPoly);
-    else if (viewMode === '3D Isometric') draw3D(canvas, result, camRef.current, hoveredRef.current, normPoly);
+    else if (viewMode === '3D Isometric') draw3D(canvas, result, camRef.current, hoveredRef.current, normPoly, timeRef.current);
   }, [viewMode, result, normPoly]);
 
-  useEffect(() => { redraw(); }, [redraw]);
+  // Static redraw for 2D
+  useEffect(() => {
+    if (viewMode === '2D Field') redraw();
+  }, [redraw, viewMode]);
+
+  // Animated RAF loop for 3D
+  useEffect(() => {
+    if (viewMode !== '3D Isometric' || !result) {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      return;
+    }
+    let running = true;
+    function loop() {
+      if (!running) return;
+      timeRef.current += 0.016;
+      redraw();
+      animFrameRef.current = requestAnimationFrame(loop);
+    }
+    animFrameRef.current = requestAnimationFrame(loop);
+    return () => { running = false; if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
+  }, [viewMode, result, redraw]);
 
   // 3D: mouse handlers
   function getCanvasPos(e: React.MouseEvent<HTMLCanvasElement>) {
@@ -558,7 +810,7 @@ export default function SpatialPlannerPage() {
       const res = await fetch('/api/spatial-planner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ width: canvas?.width || 1000, height: canvas?.height || 440, main_crop: mainCrop, companion_crops: companions, land_size: landSize }),
+        body: JSON.stringify({ width: canvas?.width || 1000, height: canvas?.height || 440, main_crop: mainCrop, companion_crops: companions, land_size: landSize, layout_mode: layoutMode }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed'); return; }
@@ -592,41 +844,110 @@ export default function SpatialPlannerPage() {
         <p>Draw your real field on satellite → save → 2D & 3D views render your exact field shape.</p>
       </div>
 
-      {/* Controls */}
-      <div className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1.25rem', alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', letterSpacing: '0.06em' }}>PRIMARY CROP</label>
-            <select className="form-control" value={mainCrop} onChange={(e) => setMainCrop(e.target.value)}>
-              {ALL_CROPS.map((c) => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
-            </select>
+      {/* Controls — Reference Design: 2-col */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        {/* Left: crop + land + generate */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <h3 style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', marginBottom: '1rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>🌾 Crop Selection</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem' }}>PRIMARY CROP</label>
+              <select className="form-control" value={mainCrop} onChange={(e) => setMainCrop(e.target.value)}>
+                {ALL_CROPS.map((c) => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem' }}>
+                LAND SIZE (acres){savedBoundary && <span style={{ color: '#4ade80', fontWeight: 400, marginLeft: 6 }}>📐 from saved field</span>}
+              </label>
+              <input className="form-control" type="number" min={0.5} max={100} step={0.5} value={landSize} onChange={(e) => setLandSize(+e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>COMPANION CROPS</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {ALL_CROPS.filter((c) => c.name !== mainCrop).slice(0,10).map((c) => {
+                  const sel = companions.includes(c.name);
+                  return <button key={c.name} onClick={() => toggleCompanion(c.name)} style={{ padding: '0.25rem 0.55rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${sel ? c.color : 'rgba(255,255,255,0.12)'}`, background: sel ? c.color+'22' : 'transparent', color: sel ? c.color : 'var(--text-muted)', transition: 'all 0.15s' }}>{c.emoji} {c.name}</button>;
+                })}
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={generate} disabled={loading} style={{ marginTop: '0.25rem', background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', boxShadow: '0 4px 15px rgba(99,102,241,0.35)', fontWeight: 700 }}>
+              {loading ? <><span className="spinner" /> Simulating...</> : '🛰️ Generate Twin'}
+            </button>
           </div>
-          <div>
-            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', letterSpacing: '0.06em' }}>
-              LAND SIZE (acres) {savedBoundary && <span style={{ color: '#4ade80', fontWeight: 400 }}>— from saved field</span>}
-            </label>
-            <input className="form-control" type="number" min={0.5} max={100} step={0.5} value={landSize} onChange={(e) => setLandSize(+e.target.value)} />
-          </div>
-          <button className="btn btn-primary" onClick={generate} disabled={loading} style={{ height: 42, whiteSpace: 'nowrap', background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', boxShadow: '0 4px 15px rgba(99,102,241,0.4)' }}>
-            {loading ? <><span className="spinner" /> Simulating...</> : '🛰️ Generate Twin'}
-          </button>
         </div>
-        <div style={{ marginTop: '1rem' }}>
-          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', letterSpacing: '0.06em' }}>COMPANION CROPS (up to 4)</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-            {ALL_CROPS.filter((c) => c.name !== mainCrop).map((c) => {
-              const sel = companions.includes(c.name);
-              return (
-                <button key={c.name} onClick={() => toggleCompanion(c.name)} style={{ padding: '0.3rem 0.65rem', borderRadius: 999, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${sel ? c.color : 'rgba(255,255,255,0.12)'}`, background: sel ? c.color + '22' : 'transparent', color: sel ? c.color : 'var(--text-muted)', transition: 'all 0.15s' }}>
-                  {c.emoji} {c.name}
-                </button>
-              );
-            })}
+        {/* Right: layout mode + crop legend */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <h3 style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', marginBottom: '1rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>📐 Layout Settings</h3>
+          <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>LAYOUT MODE</label>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            {[{k:'Grid',icon:'▦',desc:'Interleaved'},{k:'Strip',icon:'▌',desc:'Vertical'},{k:'Row',icon:'▬',desc:'Horizontal'}].map(({k,icon,desc}) => (
+              <button key={k} onClick={() => setLayoutMode(k)} style={{ flex:1, padding:'0.6rem 0.4rem', borderRadius:10, cursor:'pointer', border:`2px solid ${layoutMode===k ? '#0ea5e9' : 'rgba(255,255,255,0.1)'}`, background: layoutMode===k ? 'rgba(14,165,233,0.18)' : 'rgba(255,255,255,0.03)', color: layoutMode===k ? '#38bdf8' : 'var(--text-muted)', fontWeight:700, fontSize:'0.75rem', transition:'all 0.15s', display:'flex', flexDirection:'column', alignItems:'center', gap:'0.2rem' }}>
+                <span style={{ fontSize:'1.1rem' }}>{icon}</span>
+                <span>{k}</span>
+                <span style={{ fontSize:'0.62rem', fontWeight:400, opacity:0.6 }}>{desc}</span>
+              </button>
+            ))}
           </div>
+          {result && (
+            <>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>CROP LEGEND</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                {result.crop_stats.map(c => (
+                  <div key={c.name} style={{ display:'flex', alignItems:'center', gap:'0.6rem', padding:'0.4rem 0.6rem', borderRadius:8, background:`${c.color}12`, border:`1px solid ${c.color}28` }}>
+                    <div style={{ width:14, height:14, borderRadius:3, background:c.color, flexShrink:0 }} />
+                    <span style={{ fontSize:'0.78rem', fontWeight:600, flex:1 }}>{c.emoji} {c.name}</span>
+                    <span style={{ fontSize:'0.68rem', color:'#38bdf8' }}>{c.yield_t_per_acre}t/ac</span>
+                    <span style={{ fontSize:'0.65rem', padding:'0.1rem 0.35rem', borderRadius:999, background:'rgba(255,255,255,0.06)', color: c.water==='Low'?'#4ade80':c.water==='High'?'#f87171':'#fbbf24' }}>💧{c.water}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem' }}>
+                <div style={{ padding:'0.6rem', borderRadius:10, background:'rgba(74,222,128,0.1)', border:'1px solid rgba(74,222,128,0.25)', textAlign:'center' }}>
+                  <div style={{ fontSize:'0.62rem', color:'var(--text-muted)', marginBottom:'0.2rem' }}>✅ Optimized Yield</div>
+                  <div style={{ fontSize:'1.1rem', fontWeight:800, color:'#4ade80' }}>{result.insights.total_yield ?? '—'}t</div>
+                </div>
+                <div style={{ padding:'0.6rem', borderRadius:10, background:'rgba(161,139,250,0.1)', border:'1px solid rgba(161,139,250,0.25)', textAlign:'center' }}>
+                  <div style={{ fontSize:'0.62rem', color:'var(--text-muted)', marginBottom:'0.2rem' }}>📦 Single Crop Est.</div>
+                  <div style={{ fontSize:'1.1rem', fontWeight:800, color:'#a78bfa' }}>
+                    {result.crop_stats[0] ? (result.crop_stats[0].yield_t_per_acre * landSize).toFixed(1) : '—'}t
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          {!result && (
+            <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'1.5rem', color:'var(--text-muted)', textAlign:'center', gap:'0.5rem', border:'1px dashed rgba(255,255,255,0.08)', borderRadius:10 }}>
+              <div style={{ fontSize:'2rem' }}>🌾</div>
+              <p style={{ fontSize:'0.78rem' }}>Generate a layout to see crop legend and yield comparison</p>
+            </div>
+          )}
         </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
+
+      {/* Memory Log + Override Alert */}
+      {result?.override_crop && (
+        <div style={{ marginBottom: '0.75rem', padding: '0.75rem 1rem', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 10, fontSize: '0.82rem', color: '#fbbf24' }}>
+          ⚠️ <strong>Crop Override Applied:</strong> {result.override_reason}
+        </div>
+      )}
+      {result?.memory_log && result.memory_log.length > 0 && (
+        <div style={{ marginBottom: '0.75rem', background: 'rgba(14,165,233,0.05)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 10, overflow: 'hidden' }}>
+          <button onClick={() => setShowMemoryLog(v => !v)} style={{ width: '100%', padding: '0.6rem 1rem', background: 'none', border: 'none', color: '#38bdf8', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
+            <span>🧠 Memory Decision Log ({result.memory_log.length} steps)</span>
+            <span>{showMemoryLog ? '▲' : '▼'}</span>
+          </button>
+          {showMemoryLog && (
+            <div style={{ padding: '0.5rem 1rem 0.75rem', borderTop: '1px solid rgba(14,165,233,0.15)' }}>
+              {result.memory_log.map((log, i) => (
+                <div key={i} style={{ fontSize: '0.76rem', color: log.includes('⚠️') ? '#fbbf24' : 'rgba(255,255,255,0.55)', padding: '0.2rem 0', lineHeight: 1.6 }}>{log}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* View tabs */}
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -635,9 +956,17 @@ export default function SpatialPlannerPage() {
             {mode === '2D Field' ? '📐' : mode === '3D Isometric' ? '🗺️' : mode === 'Satellite' ? '🛰️' : '📊'} {mode}
           </button>
         ))}
+        {result?.insights.layout_score !== undefined && (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Layout Score</span>
+            <span style={{ padding: '0.25rem 0.65rem', borderRadius: 999, fontSize: '0.8rem', fontWeight: 800, background: result.insights.layout_score >= 80 ? 'rgba(74,222,128,0.15)' : result.insights.layout_score >= 55 ? 'rgba(251,191,36,0.15)' : 'rgba(248,113,113,0.15)', color: result.insights.layout_score >= 80 ? '#4ade80' : result.insights.layout_score >= 55 ? '#fbbf24' : '#f87171', border: `1px solid ${result.insights.layout_score >= 80 ? 'rgba(74,222,128,0.3)' : result.insights.layout_score >= 55 ? 'rgba(251,191,36,0.3)' : 'rgba(248,113,113,0.3)'}` }}>
+              {result.insights.layout_score}/100
+            </span>
+          </div>
+        )}
         {viewMode === '3D Isometric' && (
           <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)', paddingLeft: '0.5rem' }}>
-            🖱️ Drag · Scroll to zoom · Hover to inspect
+            🖱️ Left drag orbit · Right drag pan · Scroll zoom
           </span>
         )}
         {viewMode === 'Satellite' && !savedBoundary && (
@@ -647,12 +976,12 @@ export default function SpatialPlannerPage() {
         )}
       </div>
 
-      {/* Canvas — 2D & 3D */}
-      {(viewMode === '2D Field' || viewMode === '3D Isometric') && (
+      {/* Canvas — 2D only */}
+      {viewMode === '2D Field' && (
         <div className="card fade-in" style={{ padding: '0.75rem', marginBottom: '1rem', position: 'relative' }}>
           <canvas
             ref={canvasRef} width={1000} height={440}
-            style={{ width: '100%', borderRadius: 10, display: 'block', background: viewMode === '3D Isometric' ? '#0a1628' : '#0a1a0b', cursor: viewMode === '3D Isometric' ? 'grab' : 'default' }}
+            style={{ width: '100%', borderRadius: 10, display: 'block', background: '#0a1a0b', cursor: 'default' }}
             onMouseDown={onMouseDown} onMouseMove={onMouseMove}
             onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel}
           />
@@ -663,31 +992,55 @@ export default function SpatialPlannerPage() {
               {normPoly && <p style={{ fontSize: '0.78rem', color: '#4ade80', marginTop: '0.25rem' }}>📐 Your saved field boundary will be applied</p>}
             </div>
           )}
-          {/* 3D controls */}
-          {viewMode === '3D Isometric' && result && (
-            <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: '0.4rem' }}>
-              {[{ l: '🔍+', fn: () => { camRef.current.zoom = Math.min(4, camRef.current.zoom + 0.25); redraw(); } },
-                { l: '🔍−', fn: () => { camRef.current.zoom = Math.max(0.3, camRef.current.zoom - 0.25); redraw(); } },
-                { l: '⟳', fn: () => { camRef.current = { x: 0, y: 0, zoom: 1 }; redraw(); } }].map((b) => (
-                <button key={b.l} onClick={b.fn} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(14,165,233,0.2)', border: '1px solid rgba(14,165,233,0.4)', color: '#38bdf8', cursor: 'pointer', fontSize: '0.78rem' }}>{b.l}</button>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Hover tooltip */}
-      {tooltip && viewMode === '3D Isometric' && (
-        <div style={{ position: 'fixed', left: tooltip.x + 14, top: tooltip.y - 10, zIndex: 9999, background: 'rgba(10,22,40,0.96)', border: `1px solid ${tooltip.node.color}55`, borderRadius: 10, padding: '0.6rem 0.85rem', fontSize: '0.78rem', pointerEvents: 'none', backdropFilter: 'blur(8px)', color: '#e5e7eb', minWidth: 145, boxShadow: `0 4px 20px ${tooltip.node.color}30` }}>
-          {(() => {
-            const s = result?.crop_stats.find((c) => c.name === tooltip.node.type);
-            return (<>
-              <div style={{ fontWeight: 700, color: tooltip.node.color, marginBottom: '0.3rem' }}>{s?.emoji} {tooltip.node.type}</div>
-              {[['Yield', `${s?.yield_t_per_acre}t/acre`], ['Water', s?.water], ['Nitrogen', s?.nitrogen], ['Profit', '⭐'.repeat(Math.min(s?.profit_score || 0, 5))]].map(([k, v]) => (
-                <div key={k} style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem' }}>{k}: <b style={{ color: '#e5e7eb' }}>{v}</b></div>
-              ))}
-            </>);
-          })()}
+      {/* Three.js 3D Viewer */}
+      {viewMode === '3D Isometric' && (
+        <div className="card fade-in" style={{ padding: '0.75rem', marginBottom: '1rem', borderRadius: 14, overflow: 'hidden', minHeight: 480 }}>
+          <div style={{ position: 'relative' }}>
+            {result ? (
+              <Suspense fallback={
+                <div style={{ height: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flexDirection: 'column', gap: '1rem' }}>
+                  <span className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }} />
+                  <span>Loading 3D engine...</span>
+                </div>
+              }>
+                <FarmViewer3D result={result} />
+              </Suspense>
+            ) : (
+              <div style={{ height: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🌾</div>
+                <p style={{ fontSize: '0.88rem' }}>Generate a spatial twin to launch the 3D viewer</p>
+              </div>
+            )}
+            {/* Floating zone labels */}
+            {result && (
+              <>
+                {result.crop_stats.map((c, i) => (
+                  <div key={c.name} style={{ position: 'absolute', top: `${28 + i * 14}%`, left: `${18 + i * 38}%`, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.8)', letterSpacing: '0.04em' }}>{c.emoji} {c.name}</span>
+                  </div>
+                ))}
+                {/* Yield comparison overlay — bottom of 3D view */}
+                <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '1rem', pointerEvents: 'none' }}>
+                  <div style={{ padding: '0.6rem 1.1rem', borderRadius: 12, background: 'rgba(22,163,74,0.92)', backdropFilter: 'blur(8px)', border: '1px solid rgba(74,222,128,0.5)', minWidth: 155, textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                    <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: '0.2rem', letterSpacing: '0.07em' }}>🌿 OPTIMIZED LAYOUT</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#fff' }}>Yield: {result.insights.total_yield ?? '—'}t</div>
+                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>+{result.insights.yield_boost_pct}% vs monoculture</div>
+                  </div>
+                  <div style={{ padding: '0.6rem 1.1rem', borderRadius: 12, background: 'rgba(120,53,15,0.92)', backdropFilter: 'blur(8px)', border: '1px solid rgba(217,119,6,0.5)', minWidth: 155, textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                    <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: '0.2rem', letterSpacing: '0.07em' }}>🌾 SINGLE CROP BASELINE</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#fff' }}>
+                      Yield: {result.crop_stats[0] ? (result.crop_stats[0].yield_t_per_acre * landSize).toFixed(1) : '—'}t
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>{result.main_crop} monoculture</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -747,6 +1100,53 @@ export default function SpatialPlannerPage() {
                 💡 Best companions for {result.main_crop}: {result.insights.best_combo}
               </div>
             </div>
+
+            {/* Zone Yield Breakdown */}
+            {result.insights.zone_yields && result.insights.zone_yields.length > 0 && (
+              <div className="card" style={{ gridColumn: '1 / -1' }}>
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', color: '#a78bfa' }}>📦 Zone Yield Breakdown</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      {['Crop', 'Acres', 'Est. Yield', 'Score'].map(h => (
+                        <th key={h} style={{ padding: '0.4rem 0.5rem', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.insights.zone_yields.map((z, i) => {
+                      const stat = result.crop_stats.find(c => c.name === z.crop.split(' ')[0]);
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '0.5rem', color: stat?.color || '#a78bfa', fontWeight: 600 }}>
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: stat?.color || '#a78bfa', marginRight: 6 }} />
+                            {z.crop}
+                          </td>
+                          <td style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>{z.acres} ac</td>
+                          <td style={{ padding: '0.5rem', color: '#4ade80', fontWeight: 700 }}>{z.yield_t} t</td>
+                          <td style={{ padding: '0.5rem' }}>
+                            <div style={{ height: 5, width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: 999 }}>
+                              <div style={{ height: '100%', width: `${Math.min(100, (z.yield_t / (result.insights.total_yield||1)) * 100)}%`, background: stat?.color || '#a78bfa', borderRadius: 999 }} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 700, color: '#e5e7eb' }}>Total</td>
+                      <td style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>{result.insights.zone_yields.reduce((s,z)=>s+z.acres,0).toFixed(2)} ac</td>
+                      <td style={{ padding: '0.5rem', color: '#4ade80', fontWeight: 800 }}>{result.insights.total_yield} t</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+                {result.insights.sunlight_note && (
+                  <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.07)', borderRadius: 8, fontSize: '0.75rem', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+                    ☀️ {result.insights.sunlight_note}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="card fade-in" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>

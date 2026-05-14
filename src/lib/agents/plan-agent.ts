@@ -3,7 +3,7 @@
 
 import { getJsonModel, withTimeout } from '@/lib/gemini';
 import { dbExecute, dbLastInsertId } from '@/lib/fluxbase';
-import { saveMemory } from './context';
+import { logAgentAction } from './memory';
 import type { AgentContext, AgentResult } from './types';
 
 export interface PlanData {
@@ -96,7 +96,15 @@ Return JSON:
     const planId = await dbLastInsertId();
     plan.plan_id = planId;
 
-    void saveMemory(farmerId, 'plan', `Generated new ${plan.status} plan for ${cropName}. Harvest in ~${(plan.harvest_timeline ?? '').slice(0, 30)}...`);
+    void logAgentAction({
+      farmerId,
+      agent: 'plan',
+      actionType: 'plan_generated',
+      input: `Crop: ${cropName} | Profile: ${profileText.slice(0, 100)}`,
+      output: `Sowing: ${plan.sowing_schedule?.slice(0, 80)}. Harvest: ${plan.harvest_timeline?.slice(0, 60)}`,
+      toolsUsed: ['gemini-ai'],
+      metadata: { plan_id: plan.plan_id, crop_name: cropName, status: plan.status },
+    });
     trace.push(`Step 3 ✓: Plan #${planId} saved.`);
   }
 
